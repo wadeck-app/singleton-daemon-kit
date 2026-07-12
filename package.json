@@ -1,0 +1,17 @@
+{
+  "name": "@wadeck/singleton-daemon-kit",
+  "version": "1.0.0",
+  "description": "Singleton daemon pattern — port file, takeover, health HTTP, CLI dispatch",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "check": "tsc --noEmit && vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0",
+    "@types/node": "^20.0.0"
+  }
+}

@@ -1,0 +1,4 @@
+src/
+*.test.ts
+.idea/
+node_modules/

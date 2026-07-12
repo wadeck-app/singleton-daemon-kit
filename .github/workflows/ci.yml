@@ -1,0 +1,27 @@
+name: CI
+
+env:
+  NPM_REGISTRY: https://api.backup.wadeck.ch/npm
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Configure npm registry
+        run: |
+          echo "@wadeck:registry=${{ env.NPM_REGISTRY }}" >> ~/.npmrc
+          echo "${{ env.NPM_REGISTRY }}/:_authToken=${{ secrets.WDRIVE_NPM_TOKEN }}" >> ~/.npmrc
+
+      - run: npm ci
+
+      - run: npm run check

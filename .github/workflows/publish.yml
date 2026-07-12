@@ -1,0 +1,44 @@
+name: Publish
+
+env:
+  NPM_REGISTRY: https://api.backup.wadeck.ch/npm
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Configure npm registry
+        run: |
+          echo "@wadeck:registry=${{ env.NPM_REGISTRY }}" >> ~/.npmrc
+          echo "${{ env.NPM_REGISTRY }}/:_authToken=${{ secrets.WDRIVE_NPM_TOKEN }}" >> ~/.npmrc
+
+      - run: npm ci
+
+      - name: Compute version
+        id: version
+        run: bash ci/scripts/compute-version.sh
+
+      - name: Set package version
+        run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
+
+      - run: npm run build
+
+      - run: npm test
+
+      - name: Publish
+        run: npm publish --tag ${{ steps.version.outputs.npm_tag }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.WDRIVE_NPM_TOKEN }}
