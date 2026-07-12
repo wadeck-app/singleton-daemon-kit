@@ -34,7 +34,8 @@ jobs:
       - run: npm test
 
       - name: Publish
-        run: npm publish --tag ${{ steps.version.outputs.npm_tag }} --registry https:${NPM_REGISTRY_PATH}
+        run: |
+          echo "${NPM_REGISTRY_PATH}/:_authToken=${{ secrets.WDRIVE_NPM_TOKEN }}" >> ~/.npmrc
+          npm publish --tag ${{ steps.version.outputs.npm_tag }} --registry https:${NPM_REGISTRY_PATH}
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.WDRIVE_NPM_TOKEN }}
           NPM_REGISTRY_PATH: ${{ env.NPM_REGISTRY_PATH }}
