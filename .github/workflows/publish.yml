@@ -19,10 +19,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-          registry-url: https:${{ env.NPM_REGISTRY_PATH }}
-
-      - name: Configure auth for npm ci (scoped deps)
-        run: echo "${NPM_REGISTRY_PATH}/:_authToken=${{ secrets.WDRIVE_NPM_TOKEN }}" >> ~/.npmrc
 
       - run: npm ci
 
@@ -38,6 +34,7 @@ jobs:
       - run: npm test
 
       - name: Publish
-        run: npm publish --tag ${{ steps.version.outputs.npm_tag }}
+        run: npm publish --tag ${{ steps.version.outputs.npm_tag }} --registry https:${NPM_REGISTRY_PATH}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.WDRIVE_NPM_TOKEN }}
+          NPM_REGISTRY_PATH: ${{ env.NPM_REGISTRY_PATH }}
