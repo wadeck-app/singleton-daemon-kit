@@ -17,7 +17,6 @@ jobs:
         with:
           node-version: '24'
           registry-url: https:${{ env.NPM_REGISTRY_PATH }}
-          scope: '@wadeck'
 
       - name: Configure auth for npm ci (scoped deps)
         run: echo "${NPM_REGISTRY_PATH}/:_authToken=${{ secrets.WDRIVE_NPM_TOKEN }}" >> ~/.npmrc
