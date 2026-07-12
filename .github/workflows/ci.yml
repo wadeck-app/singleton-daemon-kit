@@ -1,7 +1,7 @@
 name: CI
 
 env:
-  NPM_REGISTRY: https://api.backup.wadeck.ch/npm
+  NPM_REGISTRY_PATH: //api.backup.wadeck.ch/npm
 
 on:
   push:
@@ -19,8 +19,10 @@ jobs:
 
       - name: Configure npm registry
         run: |
-          echo "@wadeck:registry=${{ env.NPM_REGISTRY }}" >> ~/.npmrc
-          echo "${{ env.NPM_REGISTRY }}/:_authToken=${{ secrets.WDRIVE_NPM_TOKEN }}" >> ~/.npmrc
+          echo "@wadeck:registry=https:${NPM_REGISTRY_PATH}" >> ~/.npmrc
+          echo "${NPM_REGISTRY_PATH}/:_authToken=${{ secrets.WDRIVE_NPM_TOKEN }}" >> ~/.npmrc
+        env:
+          NPM_REGISTRY_PATH: ${{ env.NPM_REGISTRY_PATH }}
 
       - run: npm ci
 
