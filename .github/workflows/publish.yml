@@ -45,5 +45,9 @@ jobs:
 
       - name: Publish
         run: |
-          npm publish --tag ${{ steps.version.outputs.npm_tag }} --loglevel http 2>&1 || \
-          (echo "=== NPM DEBUG LOG ===" && cat /home/runner/.npm/_logs/*.log && exit 1)
+          npm publish --tag ${{ steps.version.outputs.npm_tag }} 2>&1; EXIT=$?
+          if [ $EXIT -ne 0 ]; then
+            echo "=== NPM DEBUG LOG (publish only) ==="
+            ls -t /home/runner/.npm/_logs/*.log | head -1 | xargs cat
+            exit $EXIT
+          fi
