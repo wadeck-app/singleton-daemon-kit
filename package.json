@@ -10,7 +10,7 @@
     "check": "tsc --noEmit && vitest run"
   },
   "publishConfig": {
-    "registry": "https://api.backup.wadeck.ch/npm"
+    "registry": "https://api.backup.wadeck.ch/npm/"
   },
   "devDependencies": {
     "typescript": "^5.4.0",
