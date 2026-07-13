@@ -37,7 +37,10 @@ jobs:
         run: |
           echo "//api.backup.wadeck.ch/npm/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
           echo "=== .npmrc (token masked) ===" && sed 's/_authToken=.*/_authToken=***/' ~/.npmrc
-          echo "=== npm whoami ===" && npm whoami --registry "${NPM_REGISTRY_URL}" 2>&1 || true
+          echo "=== ping registry ===" && curl -s -o /dev/null -w "%{http_code}" "${NPM_REGISTRY_URL}/-/ping" -H "Authorization: Bearer ${NODE_AUTH_TOKEN}" || true
+          echo ""
+          echo "=== GET package (auth check) ===" && curl -s -o /dev/null -w "%{http_code}" "${NPM_REGISTRY_URL}/wadeck-singleton-daemon-kit" -H "Authorization: Bearer ${NODE_AUTH_TOKEN}" || true
+          echo ""
         env:
           NODE_AUTH_TOKEN: ${{ secrets.WDRIVE_NPM_TOKEN }}
 
