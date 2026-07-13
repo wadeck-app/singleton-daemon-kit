@@ -35,9 +35,8 @@ jobs:
 
       - name: Configure auth for private registry
         run: |
-          echo "//api.backup.wadeck.ch/npm/:_authToken=${NODE_AUTH_TOKEN}" >> "${NPM_CONFIG_USERCONFIG}"
-          echo "=== NPM_CONFIG_USERCONFIG: ${NPM_CONFIG_USERCONFIG} ==="
-          echo "=== userconfig content (token masked) ===" && sed 's/_authToken=.*/_authToken=***/' "${NPM_CONFIG_USERCONFIG}"
+          echo "//api.backup.wadeck.ch/npm/:_authToken=${NODE_AUTH_TOKEN}" >> .npmrc
+          echo "=== project .npmrc (token masked) ===" && sed 's/_authToken=.*/_authToken=***/' .npmrc
           echo "=== ping ===" && curl -s -o /dev/null -w "%{http_code}" "${NPM_REGISTRY_URL}/-/ping" && echo ""
           echo "=== whoami ===" && curl -s "${NPM_REGISTRY_URL}/-/whoami" -H "Authorization: Bearer ${NODE_AUTH_TOKEN}"
           echo ""
