@@ -45,12 +45,5 @@ jobs:
 
       - name: Publish
         run: |
-          echo "=== npm config list ==="
-          npm config list
-          echo "=== npm config get registry ==="
-          npm config get registry
-          echo "=== .npmrc files npm finds ==="
-          npm config ls -l 2>&1 | grep -i "npmrc\|userconfig\|globalconfig\|builtin"
-          echo "=== attempt publish with --loglevel verbose ==="
-          npm publish --tag ${{ steps.version.outputs.npm_tag }} --loglevel verbose 2>&1 | grep -E "auth|token|registry|PUT|401|403|ENEED" || true
-          npm publish --tag ${{ steps.version.outputs.npm_tag }}
+          npm publish --tag ${{ steps.version.outputs.npm_tag }} --loglevel http 2>&1 || \
+          (echo "=== NPM DEBUG LOG ===" && cat /home/runner/.npm/_logs/*.log && exit 1)
