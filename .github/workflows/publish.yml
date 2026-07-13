@@ -33,9 +33,13 @@ jobs:
 
       - run: npm test
 
+      - name: Configure registry for publish
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https:${{ env.NPM_REGISTRY_PATH }}
+
       - name: Publish
-        run: |
-          echo "${NPM_REGISTRY_PATH}/:_authToken=${{ secrets.WDRIVE_NPM_TOKEN }}" >> ~/.npmrc
-          npm publish --tag ${{ steps.version.outputs.npm_tag }} --registry https:${NPM_REGISTRY_PATH}
+        run: npm publish --tag ${{ steps.version.outputs.npm_tag }}
         env:
-          NPM_REGISTRY_PATH: ${{ env.NPM_REGISTRY_PATH }}
+          NODE_AUTH_TOKEN: ${{ secrets.WDRIVE_NPM_TOKEN }}
