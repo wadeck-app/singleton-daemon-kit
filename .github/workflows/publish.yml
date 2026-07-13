@@ -1,7 +1,7 @@
 name: Publish
 
 env:
-  NPM_REGISTRY_PATH: //api.backup.wadeck.ch/npm
+  NPM_REGISTRY_URL: https://api.backup.wadeck.ch/npm
 
 on:
   push:
@@ -33,11 +33,11 @@ jobs:
 
       - run: npm test
 
-      - name: Configure npm auth for publish
+      - name: Configure auth for private registry
         run: |
-          echo "registry=https:${NPM_REGISTRY_PATH}" > ~/.npmrc
-          echo "always-auth=true" >> ~/.npmrc
-          echo "${NPM_REGISTRY_PATH}/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+          echo "//api.backup.wadeck.ch/npm/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+          echo "=== .npmrc (token masked) ===" && sed 's/_authToken=.*/_authToken=***/' ~/.npmrc
+          echo "=== npm whoami ===" && npm whoami --registry "${NPM_REGISTRY_URL}" 2>&1 || true
         env:
           NODE_AUTH_TOKEN: ${{ secrets.WDRIVE_NPM_TOKEN }}
 
