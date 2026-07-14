@@ -147,11 +147,10 @@ build_target() {
   local output="$3"
 
   echo "  Building $goos/$goarch -> $output"
-  if ! GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build \
+  if ! (cd "$TMPDIR" && GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build \
     -trimpath \
     -ldflags "-s -w" \
-    -o "$output" \
-    "$TMPDIR"; then
+    -o "$output" .); then
     echo "Error: build failed for $goos/$goarch" >&2
     exit 1
   fi
