@@ -10,7 +10,7 @@
     "check": "tsc --noEmit && vitest run"
   },
   "publishConfig": {
-    "@wadeck:registry": "https://gitlab.com/api/v4/packages/npm/"
+    "@wadeck:registry": "https://gitlab.com/api/v4/projects/84445653/packages/npm/"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

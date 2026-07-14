@@ -1,8 +1,7 @@
 name: Publish
 
 env:
-  GITLAB_NPM_REGISTRY: https://gitlab.com/api/v4/packages/npm/
-  GITLAB_NPM_REGISTRY_AUTH: //gitlab.com/api/v4/packages/npm/
+  GITLAB_NPM_REGISTRY_PATH: //gitlab.com/api/v4/projects/84445653/packages/npm/
 
 on:
   push:
@@ -48,11 +47,11 @@ jobs:
           fi
           echo "=== Token preview: ${TOKEN:0:9}*** ==="
 
-          echo "@wadeck:registry=${GITLAB_NPM_REGISTRY}" >> .npmrc
-          echo "${GITLAB_NPM_REGISTRY_AUTH}:_authToken=${TOKEN}" >> .npmrc
+          echo "@wadeck:registry=https:${GITLAB_NPM_REGISTRY_PATH}" >> .npmrc
+          echo "${GITLAB_NPM_REGISTRY_PATH}:_authToken=${TOKEN}" >> .npmrc
           echo "auth-type=legacy" >> .npmrc
           echo "=== .npmrc (token masked) ===" && sed 's/_authToken=.*/_authToken=***/' .npmrc
-          echo "=== whoami ===" && curl -s "${GITLAB_NPM_REGISTRY}/-/whoami" -H "Authorization: Bearer ${TOKEN}"
+          echo "=== whoami ===" && curl -s "https:${GITLAB_NPM_REGISTRY_PATH}-/whoami" -H "Authorization: Bearer ${TOKEN}"
           echo ""
         env:
           GITLAB_NPM_WRITE_TOKEN: ${{ secrets.GITLAB_NPM_WRITE_TOKEN }}
