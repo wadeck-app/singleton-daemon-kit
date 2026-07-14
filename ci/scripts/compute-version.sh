@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # Computes the npm version string for this build.
 #
-# Format: 1.0.YYYYMMDD-HHMMSS-BUILD-SHA
-# Examples: 1.0.20260712-195044-142-a3f2b1c4
+# Format: 1.YYYYMMDD.HHMMSSbbb  (bbb = zero-padded build count)
+# Examples: 1.20260712.195044019
 #
 # Why this format:
-# - major.minor (1.0) stay free for real API breaking changes
-# - ^1.0.0 in consumers works forever (no year rollover breakage)
-# - YYYYMMDD-HHMMSS-BUILD ensures correct semver sort for multiple releases/day
-# - BUILD (commit count) is monotone and acts as tiebreaker
+# - major (1) stays free for real API breaking changes
+# - minor = YYYYMMDD (date), patch = HHMMSS + build count suffix
+# - NO hyphens = NOT a prerelease in semver — ^1.0.0 matches all 1.x.x
+# - Correct semver sort: later dates always sort higher; build count is
+#   appended to the seconds to break ties within the same second
+# - Consumers use ^1.0.0 which matches any 1.x.x release, no prerelease issues
 #
 # Outputs (to $GITHUB_OUTPUT or stdout when GITHUB_OUTPUT is unset):
-#   version   e.g. 1.0.20260712-195044-142-a3f2b1c4
+#   version   e.g. 1.20260712.195044019
 #   npm_tag   latest
 set -euo pipefail
 
@@ -22,7 +24,7 @@ TIME=$(date -u '+%H%M%S')
 BUILD=$(git -C "$REPO_ROOT" rev-list --count HEAD)
 SHA=$(git -C "$REPO_ROOT" rev-parse --short=8 HEAD)
 
-VERSION="1.0.${DATE}-${TIME}-${BUILD}-${SHA}"
+VERSION="1.${DATE}.${TIME}$(printf '%03d' "$BUILD")"
 NPM_TAG="latest"
 
 OUT="${GITHUB_OUTPUT:-/dev/stdout}"
