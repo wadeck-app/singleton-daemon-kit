@@ -164,16 +164,16 @@ afterEach(async () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mocked unit tests — no real I/O, fake timers
+// Mocked unit tests - no real I/O, fake timers
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('takeover — mocked (unit)', () => {
+describe('takeover - mocked (unit)', () => {
   beforeEach(() => {
     // Override port-file with pure mocks
     mockReadPortFile.mockResolvedValue(null);
     mockDeletePortFile.mockResolvedValue(undefined);
     mockIsFresh.mockResolvedValue(true);
-    // Fake JS timers — NOT setImmediate (keep real so Promise.resolve().then() microtasks
+    // Fake JS timers - NOT setImmediate (keep real so Promise.resolve().then() microtasks
     // can fire between timer advancements in advanceTimersByTimeAsync)
     vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'Date'] });
   });
@@ -327,7 +327,7 @@ describe('takeover — mocked (unit)', () => {
     });
 
     _httpRequestOverride = makeHttpRequestMock(); // /quit succeeds
-    // Port stays open even after /quit — process stuck
+    // Port stays open even after /quit - process stuck
     _netSocketPortOpen = () => sigtermPids.length === 0;
 
     const p = takeoverIfRunning(tmpDir, {});
@@ -377,7 +377,7 @@ describe('takeover — mocked (unit)', () => {
     mockIsFresh.mockResolvedValue(true);
     _fsReadFileOverride = async (_p, _enc) => 'test-token';
 
-    // Always alive — never throws ESRCH
+    // Always alive - never throws ESRCH
     vi.spyOn(process, 'kill').mockImplementation(() => true);
 
     _httpRequestOverride = makeHttpRequestMock({

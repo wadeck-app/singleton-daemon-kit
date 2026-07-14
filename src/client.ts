@@ -133,7 +133,7 @@ export function createDaemonClient<T extends CommandMap>(options: ClientOptions<
 
       const resp = await httpPost(data.port, command, token, payload);
 
-      if (resp.status === 401) throw new DaemonNotRunningError('Unauthorized — token mismatch');
+      if (resp.status === 401) throw new DaemonNotRunningError('Unauthorized - token mismatch');
       if (resp.status === 404) throw new DaemonNotRunningError(`Unknown command: ${command}`);
       if (resp.status === 500) throw new Error((resp.body.error as string) ?? 'Command failed');
 

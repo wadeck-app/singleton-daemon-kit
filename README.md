@@ -1,6 +1,6 @@
 # singleton-daemon-kit
 
-TypeScript SDK for the singleton daemon pattern — port file, process takeover, health HTTP server, and CLI command dispatch.
+TypeScript SDK for the singleton daemon pattern - port file, process takeover, health HTTP server, and CLI command dispatch.
 
 ## Installation
 
@@ -50,7 +50,7 @@ if (await client.isRunning()) {
 
 ## npm Registry
 
-Packages are hosted on **GitLab Packages** — source code remains on GitHub.
+Packages are hosted on **GitLab Packages** - source code remains on GitHub.
 
 | Item | Value |
 |------|-------|

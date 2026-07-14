@@ -30,7 +30,7 @@ describe('daemon', () => {
     expect(versionInfo.port).toBe(daemon.port);
   });
 
-  it('T2: takeover — createDaemon twice same configDir, first evicted, onTakeover called', async () => {
+  it('T2: takeover - createDaemon twice same configDir, first evicted, onTakeover called', async () => {
     const commands = { ping: () => 'pong' } as unknown as CommandMap;
     const onTakeover = vi.fn();
 
@@ -105,7 +105,7 @@ describe('daemon', () => {
 
   it('T7: void handler (returns undefined) → response is 200, no error propagated', async () => {
     const onCommandError = vi.fn();
-    // A void handler returns undefined — server sends { ok: true } and never 500
+    // A void handler returns undefined - server sends { ok: true } and never 500
     const commands2 = {
       voidCmd: () => {
         // returns undefined implicitly

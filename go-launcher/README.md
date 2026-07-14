@@ -12,11 +12,11 @@ that is visible by name, while keeping Node.js as the actual daemon runtime.
 
 Two modes, selected automatically from `os.Args`:
 
-- **CLI dispatch** — when a recognised flag (`--quit`, `--sync-now`, ...) is present:
+- **CLI dispatch** - when a recognised flag (`--quit`, `--sync-now`, ...) is present:
   reads `config.port` + `health_token`, sends `POST /<command>` to the daemon, prints
   the result, exits. Node.js is never spawned.
 
-- **Daemon mode** — no recognised flag: spawns `node <script> <args>` with
+- **Daemon mode** - no recognised flag: spawns `node <script> <args>` with
   `CREATE_NO_WINDOW` (no console popup), attaches a Windows Job Object so that
   killing the wrapper also kills node, forwards `Ctrl+C` from the terminal to node,
   stays alive until node exits, and forwards the exit code.
@@ -53,7 +53,7 @@ func main() {
 
 ```
 myapp.exe   (Go wrapper, ~0% CPU)
-node.exe    (child — the actual daemon)
+node.exe    (child - the actual daemon)
 ```
 
 Killing `myapp.exe` kills `node.exe` automatically (Job Object).

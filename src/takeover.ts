@@ -94,7 +94,7 @@ export async function takeoverIfRunning(configDir: string, hooks: DaemonHooks): 
   try {
     await postQuit(port, token);
   } catch {
-    // Ignore errors — will check if port closed anyway
+    // Ignore errors - will check if port closed anyway
   }
 
   // Step 5: poll port closure every 100ms for 3s (works for both same-process and cross-process)

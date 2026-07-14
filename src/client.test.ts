@@ -44,7 +44,7 @@ describe('client', () => {
     await expect(client.send('foo')).rejects.toThrow(DaemonVersionError);
   });
 
-  it('T18: port auto-increment — if base port occupied, daemon binds on next port', async () => {
+  it('T18: port auto-increment - if base port occupied, daemon binds on next port', async () => {
     // Occupy a port
     const blocker = net.createServer();
     await new Promise<void>((resolve) => blocker.listen(0, '127.0.0.1', resolve));

@@ -81,7 +81,7 @@ export async function startHealthServer<T extends CommandMap>(
     const url = req.url ?? '/';
     const method = req.method ?? 'GET';
 
-    // POST /quit — built-in eviction endpoint, auth required
+    // POST /quit - built-in eviction endpoint, auth required
     if (method === 'POST' && url === '/quit') {
       const authHeader = req.headers['authorization'] ?? '';
       const storedToken = (await fs.readFile(tokenPath, 'utf8').catch(() => '')).trim();
@@ -98,7 +98,7 @@ export async function startHealthServer<T extends CommandMap>(
       return;
     }
 
-    // GET /version — no auth
+    // GET /version - no auth
     if (method === 'GET' && url === '/version') {
       sendJson(res, 200, {
         ...(versionExtra ? versionExtra() : {}),
@@ -111,7 +111,7 @@ export async function startHealthServer<T extends CommandMap>(
       return;
     }
 
-    // GET /health — auth required
+    // GET /health - auth required
     if (method === 'GET' && url === '/health') {
       if (!health) {
         sendJson(res, 404, { error: 'No health handler configured' });
@@ -128,7 +128,7 @@ export async function startHealthServer<T extends CommandMap>(
       return;
     }
 
-    // POST /:command — auth required
+    // POST /:command - auth required
     if (method === 'POST') {
       const commandName = url.slice(1); // remove leading /
       const authHeader = req.headers['authorization'] ?? '';
@@ -178,7 +178,7 @@ export async function startHealthServer<T extends CommandMap>(
   });
 
   // Try ports from basePort to basePort+10
-  // Special case: port 0 means OS assigns a port — don't iterate
+  // Special case: port 0 means OS assigns a port - don't iterate
   let actualPort: number | null = null;
 
   if (basePort === 0) {
