@@ -1,5 +1,5 @@
 {
-  "name": "wadeck-singleton-daemon-kit",
+  "name": "@wadeck/singleton-daemon-kit",
   "version": "1.0.0",
   "description": "Singleton daemon pattern — port file, takeover, health HTTP, CLI dispatch",
   "main": "dist/index.js",
@@ -10,7 +10,7 @@
     "check": "tsc --noEmit && vitest run"
   },
   "publishConfig": {
-    "registry": "https://api.backup.wadeck.ch/npm/"
+    "@wadeck:registry": "https://gitlab.com/api/v4/packages/npm/"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

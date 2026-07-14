@@ -1,7 +1,8 @@
 name: Publish
 
 env:
-  NPM_REGISTRY_URL: https://api.backup.wadeck.ch/npm/
+  GITLAB_NPM_REGISTRY: https://gitlab.com/api/v4/packages/npm/
+  GITLAB_NPM_REGISTRY_AUTH: //gitlab.com/api/v4/packages/npm/
 
 on:
   push:
@@ -33,16 +34,28 @@ jobs:
 
       - run: npm test
 
-      - name: Configure auth for private registry
+      - name: Configure auth for GitLab npm registry
         run: |
-          echo "//api.backup.wadeck.ch/npm/:_authToken=${NODE_AUTH_TOKEN}" >> .npmrc
+          # Trim whitespace and validate token format
+          TOKEN=$(echo "${GITLAB_NPM_WRITE_TOKEN}" | tr -d '[:space:]')
+          if [ -z "$TOKEN" ]; then
+            echo "ERROR: GITLAB_NPM_WRITE_TOKEN is empty after trim"
+            exit 1
+          fi
+          if [[ "$TOKEN" != gldt-* ]]; then
+            echo "ERROR: GITLAB_NPM_WRITE_TOKEN does not start with 'gldt-'"
+            exit 1
+          fi
+          echo "=== Token preview: ${TOKEN:0:9}*** ==="
+
+          echo "@wadeck:registry=${GITLAB_NPM_REGISTRY}" >> .npmrc
+          echo "${GITLAB_NPM_REGISTRY_AUTH}:_authToken=${TOKEN}" >> .npmrc
           echo "auth-type=legacy" >> .npmrc
-          echo "=== project .npmrc (token masked) ===" && sed 's/_authToken=.*/_authToken=***/' .npmrc
-          echo "=== ping ===" && curl -s -o /dev/null -w "%{http_code}" "${NPM_REGISTRY_URL}/-/ping" && echo ""
-          echo "=== whoami ===" && curl -s "${NPM_REGISTRY_URL}/-/whoami" -H "Authorization: Bearer ${NODE_AUTH_TOKEN}"
+          echo "=== .npmrc (token masked) ===" && sed 's/_authToken=.*/_authToken=***/' .npmrc
+          echo "=== whoami ===" && curl -s "${GITLAB_NPM_REGISTRY}/-/whoami" -H "Authorization: Bearer ${TOKEN}"
           echo ""
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.WDRIVE_NPM_TOKEN }}
+          GITLAB_NPM_WRITE_TOKEN: ${{ secrets.GITLAB_NPM_WRITE_TOKEN }}
 
       - name: Publish
         run: |
