@@ -1,31 +1,27 @@
 #!/usr/bin/env bash
 # Computes the npm version string for this build.
 #
-# Format: 1.YYYYMMDD.HHMMSS+BUILD.SHA
-# Examples: 1.20260714.183622+23.70228b01
+# Format: 1.YYYYMMDDHHMMSS.BUILD
+# Examples: 1.20260714191529.25
 #
 # Why this format:
 # - major (1) stays free for real API breaking changes
-# - minor = YYYYMMDD, patch = HHMMSS — human-readable date/time, no hyphens
-# - NO hyphens in MAJOR.MINOR.PATCH = NOT a semver prerelease — ^1.0.0 matches
-# - +BUILD.SHA = semver build metadata, ignored by range comparisons
-#   - BUILD (commit count) is monotone and guarantees no collision
-#   - SHA allows tracing the exact commit
-# - Correct semver sort: later dates/times always sort higher
+# - minor = YYYYMMDDHHMMSS — date+time compact, no separators, pure integer, sortable
+# - patch = BUILD (git commit count) — monotone, unique tiebreaker for same-second builds
+# - NO hyphens = NOT a semver prerelease — ^1.0.0 matches all 1.x.x
+# - SHA is visible in the tarball filename logged by npm during publish
 #
 # Outputs (to $GITHUB_OUTPUT or stdout when GITHUB_OUTPUT is unset):
-#   version   e.g. 1.20260714.183622+23.70228b01
+#   version   e.g. 1.20260714191529.25
 #   npm_tag   latest
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
-DATE=$(date -u '+%Y%m%d')
-TIME=$(date -u '+%H%M%S')
+DATETIME=$(date -u '+%Y%m%d%H%M%S')
 BUILD=$(git -C "$REPO_ROOT" rev-list --count HEAD)
-SHA=$(git -C "$REPO_ROOT" rev-parse --short=8 HEAD)
 
-VERSION="1.${DATE}.${TIME}+${BUILD}.${SHA}"
+VERSION="1.${DATETIME}.${BUILD}"
 NPM_TAG="latest"
 
 OUT="${GITHUB_OUTPUT:-/dev/stdout}"
