@@ -1,0 +1,23 @@
+package main
+
+import (
+	"os"
+	"path/filepath"
+
+	launcher "wadeck.ch/singleton-daemon-kit/go-launcher"
+)
+
+func main() {
+	exe, _ := os.Executable()
+	exeDir := filepath.Dir(exe)
+
+	configDir := launcher.ResolveConfigDir(os.Args[1:], launcher.DefaultConfigDir("{{.DefaultConfigDir}}"))
+
+	launcher.Run(launcher.Config{
+		ConfigDir:  configDir,
+		NodeScript: filepath.Join(exeDir, "{{.NodeScript}}"),
+		CLIFlags: []string{
+{{range .CLIFlags}}			"{{.}}",
+{{end}}		},
+	})
+}
