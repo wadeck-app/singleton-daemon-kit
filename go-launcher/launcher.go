@@ -204,6 +204,23 @@ func runDaemon(cfg Config, args []string) {
 	}
 
 	close(stopSignals)
+
+	// Check for restart sentinel written by Node before it exited.
+	// Node cannot spawn a new wdrive.exe outside the Job Object — only the Go
+	// launcher (which is not in the Job Object) can safely re-spawn.
+	sentinelPath := filepath.Join(cfg.ConfigDir, "config.restart")
+	if exitCode == 0 {
+		if _, err := os.Stat(sentinelPath); err == nil {
+			if removeErr := os.Remove(sentinelPath); removeErr == nil {
+				logInfo(cfg.ConfigDir, "launcher", "restart sentinel detected — relaunching")
+				runDaemon(cfg, args)
+				return // unreachable but explicit
+			} else {
+				logWarn(cfg.ConfigDir, "launcher", fmt.Sprintf("restart sentinel found but could not remove: %v — not relaunching", removeErr))
+			}
+		}
+	}
+
 	os.Exit(exitCode)
 }
 
