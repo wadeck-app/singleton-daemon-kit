@@ -2,6 +2,7 @@ import { takeoverIfRunning } from './takeover.js';
 import { writePortFile, startHeartbeat, deletePortFile } from './port-file.js';
 import { startHealthServer } from './health-server.js';
 import { createIdleTimer } from './idle-timer.js';
+import { acquireStartupLock } from './startup-lock.js';
 import { type DaemonOptions, type DaemonHandle, type ShutdownReason, type CommandMap } from './types.js';
 
 export async function createDaemon<T extends CommandMap>(options: DaemonOptions<T>): Promise<DaemonHandle> {
@@ -12,28 +13,43 @@ export async function createDaemon<T extends CommandMap>(options: DaemonOptions<
     idleTimeout = null,
     drainTimeout = 5000,
     health,
+    appVersion,
     versionExtra,
     hooks = {},
   } = options;
 
-  // Step 1: takeover if running
-  await takeoverIfRunning(configDir, hooks);
+  // Acquire startup lock before takeoverIfRunning to prevent concurrent race:
+  // two instances starting simultaneously would both read the same port file,
+  // both evict the existing daemon, and both start their own health servers.
+  const releaseLock = await acquireStartupLock(configDir);
 
-  // Step 2: start health server (writes health_token)
-  const serverHandle = await startHealthServer({
-    configDir,
-    commands,
-    port,
-    health,
-    versionExtra,
-    hooks,
-    onQuit: () => handle.stop('command'),
-  });
+  let serverHandle: Awaited<ReturnType<typeof startHealthServer>>;
+  let actualPort: number;
 
-  const actualPort = serverHandle.port;
+  try {
+    // Step 1: takeover if running
+    await takeoverIfRunning(configDir, hooks);
 
-  // Step 3: write port file
-  await writePortFile(configDir, actualPort, process.pid);
+    // Step 2: start health server (writes health_token)
+    serverHandle = await startHealthServer({
+      configDir,
+      commands,
+      port,
+      health,
+      appVersion,
+      versionExtra,
+      hooks,
+      onQuit: () => handle.stop('command'),
+    });
+
+    actualPort = serverHandle.port;
+
+    // Step 3: write port file — lock is released only after this so the next
+    // waiter sees a fresh, valid port file when it acquires the lock.
+    await writePortFile(configDir, actualPort, process.pid);
+  } finally {
+    await releaseLock();
+  }
 
   // Step 4: start heartbeat
   const stopHeartbeat = startHeartbeat(configDir);

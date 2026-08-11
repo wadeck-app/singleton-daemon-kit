@@ -57,6 +57,7 @@ export interface HealthServerOptions<T extends CommandMap> {
   port?: number;
   health?: () => HealthStatus;
   versionExtra?: () => Record<string, unknown>;
+  appVersion?: string;
   hooks?: DaemonHooks;
   onQuit?: () => void | Promise<void>;
 }
@@ -69,7 +70,7 @@ export interface HealthServerHandle {
 export async function startHealthServer<T extends CommandMap>(
   options: HealthServerOptions<T>
 ): Promise<HealthServerHandle> {
-  const { configDir, commands, health, versionExtra, hooks, onQuit } = options;
+  const { configDir, commands, health, versionExtra, appVersion, hooks, onQuit } = options;
   const basePort = options.port ?? 47823;
 
   // Generate and write health_token
@@ -102,7 +103,7 @@ export async function startHealthServer<T extends CommandMap>(
     if (method === 'GET' && url === '/version') {
       sendJson(res, 200, {
         ...(versionExtra ? versionExtra() : {}),
-        version: PACKAGE_VERSION,
+        version: appVersion ?? PACKAGE_VERSION,
         pid: process.pid,
         config_dir: configDir,
         sdkVersion: SDK_VERSION,

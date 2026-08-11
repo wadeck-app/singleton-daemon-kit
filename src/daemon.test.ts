@@ -3,7 +3,7 @@ import { createTestDaemon } from './test-harness.js';
 import { createDaemonClient } from './client.js';
 import { createDaemon } from './daemon.js';
 import { writePortFile, readPortFile } from './port-file.js';
-import { type CommandMap } from './types.js';
+import { type CommandMap, type DaemonHandle } from './types.js';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
@@ -177,5 +177,67 @@ describe('daemon', () => {
     await daemon.stop('command');
     const data = await readPortFile(configDir);
     expect(data).toBeNull();
+  });
+
+  it('T-VE4: createDaemon with appVersion → GET /version returns that version', async () => {
+    const commands = {} as CommandMap;
+    await using daemon = await createTestDaemon({
+      commands,
+      appVersion: '2026.07.15-test',
+    });
+    const res = await fetch(`http://127.0.0.1:${daemon.port}/version`);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body['version']).toBe('2026.07.15-test');
+  });
+
+  it('T-VE5: createDaemon without appVersion → GET /version returns SDK PACKAGE_VERSION (backward compat)', async () => {
+    const commands = {} as CommandMap;
+    await using daemon = await createTestDaemon({ commands });
+    const res = await fetch(`http://127.0.0.1:${daemon.port}/version`);
+    const body = await res.json() as Record<string, unknown>;
+    // Without appVersion, falls back to SDK PACKAGE_VERSION '1.0.0'
+    expect(body['version']).toBe('1.0.0');
+  });
+});
+
+describe('takeover - race condition', () => {
+  it('T-RACE: concurrent createDaemon calls → only one daemon alive at the end', async () => {
+    const commands = {} as CommandMap;
+
+    // Start initial daemon
+    const daemon1 = await createDaemon({ configDir: tmpDir, commands, port: 0 });
+
+    // Concurrently attempt two takeovers
+    const results = await Promise.allSettled([
+      createDaemon({ configDir: tmpDir, commands, port: 0 }),
+      createDaemon({ configDir: tmpDir, commands, port: 0 }),
+    ]);
+
+    const succeeded = results
+      .filter((r): r is PromiseFulfilledResult<DaemonHandle> => r.status === 'fulfilled')
+      .map(r => r.value);
+
+    // Check how many ports are actually responding
+    const alive = await Promise.all(
+      succeeded.map(async d => {
+        try {
+          const res = await fetch(`http://127.0.0.1:${d.port}/version`);
+          return res.ok;
+        } catch {
+          return false;
+        }
+      })
+    );
+
+    const aliveCount = alive.filter(Boolean).length;
+
+    // Clean up
+    for (const d of succeeded) {
+      await d.stop('command').catch(() => {});
+    }
+
+    // With bug: both run simultaneously, both start health servers → 2 alive
+    // With lock: they serialize, second evicts first → only 1 alive at the end
+    expect(aliveCount).toBe(1);
   });
 });

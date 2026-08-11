@@ -12,6 +12,7 @@ export interface DaemonOptions<T extends CommandMap> {
   drainTimeout?: number;
   health?: () => HealthStatus;
   versionExtra?: () => Record<string, unknown>;
+  appVersion?: string;
   hooks?: DaemonHooks;
 }
 
