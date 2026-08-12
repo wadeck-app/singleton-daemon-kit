@@ -61,9 +61,8 @@ export async function createDaemon<T extends CommandMap>(options: DaemonOptions<
 
   // Step 5: start idle timer
   // idleTimer.reset() is intentionally not wired into the health server command path.
-  // wdrive passes idleTimeout: null — the daemon is designed to run permanently.
-  // Consumers using idleTimeout (e.g. flow-cli) should wire reset() via the hooks
-  // option if needed: hooks.onCommand = () => idleTimer.reset().
+  // Consumers that pass idleTimeout: null run permanently and never idle-exit.
+  // Consumers using idleTimeout can wire reset() themselves via a command hook.
   const idleTimer = createIdleTimer(
     idleTimeout ?? null,
     drainTimeout,
