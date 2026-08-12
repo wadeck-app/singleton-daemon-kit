@@ -2,12 +2,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createTestDaemon } from './test-harness.js';
 import { createDaemonClient } from './client.js';
 import { createDaemon } from './daemon.js';
-import { writePortFile, readPortFile } from './port-file.js';
+import * as portFileModule from './port-file.js';
 import { type CommandMap, type DaemonHandle } from './types.js';
 import * as fs from 'fs/promises';
+import * as net from 'net';
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
+
+const { writePortFile, readPortFile } = portFileModule;
 
 let tmpDir: string;
 
@@ -197,6 +200,67 @@ describe('daemon', () => {
     const body = await res.json() as Record<string, unknown>;
     // Without appVersion, falls back to SDK PACKAGE_VERSION '1.0.0'
     expect(body['version']).toBe('1.0.0');
+  });
+});
+
+describe('daemon - server leak and token', () => {
+  it('T-H6: writePortFile throws after health server starts → port is released', async () => {
+    let capturedPort: number | null = null;
+
+    const spy = vi.spyOn(portFileModule, 'writePortFile').mockImplementationOnce(
+      async (_dir, port) => {
+        capturedPort = port;
+        throw new Error('disk full simulation');
+      }
+    );
+
+    try {
+      await expect(
+        createDaemon({ configDir: tmpDir, commands: {} as CommandMap, port: 0 })
+      ).rejects.toThrow('disk full simulation');
+
+      expect(capturedPort).not.toBeNull();
+
+      // Give server a moment to close
+      await new Promise<void>(resolve => setTimeout(resolve, 100));
+
+      // Port must be closed (connection refused) — the server must not keep listening
+      const isOpen = await new Promise<boolean>(resolve => {
+        const sock = new net.Socket();
+        sock.setTimeout(300);
+        sock.connect(capturedPort!, '127.0.0.1');
+        sock.once('connect', () => { sock.destroy(); resolve(true); });
+        sock.once('error', () => resolve(false));
+        sock.once('timeout', () => { sock.destroy(); resolve(false); });
+      });
+
+      expect(isOpen).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('T-M9: deleting health_token file does not break authenticated commands (token in memory)', async () => {
+    const commands = { ping: () => 'pong' } as unknown as CommandMap;
+    await using daemon = await createTestDaemon({ commands });
+
+    // Read the token before deleting the file — we'll use it for the HTTP call
+    const token = (await fs.readFile(path.join(daemon.configDir, 'health_token'), 'utf8')).trim();
+
+    // Delete the health_token file from disk
+    await fs.rm(path.join(daemon.configDir, 'health_token'), { force: true });
+
+    // Send request via raw fetch (not via the high-level client which also reads the file)
+    // to prove the SERVER uses its in-memory token, not a re-read from disk.
+    // Before the fix: server reads '' from disk → 401.
+    // After the fix: server uses in-memory token → 200.
+    const response = await fetch(`http://127.0.0.1:${daemon.port}/ping`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json() as { ok: boolean; result: unknown };
+    expect(body.result).toBe('pong');
   });
 });
 

@@ -85,9 +85,8 @@ export async function startHealthServer<T extends CommandMap>(
     // POST /quit - built-in eviction endpoint, auth required
     if (method === 'POST' && url === '/quit') {
       const authHeader = req.headers['authorization'] ?? '';
-      const storedToken = (await fs.readFile(tokenPath, 'utf8').catch(() => '')).trim();
       const provided = authHeader.replace(/^Bearer\s+/, '');
-      if (!checkToken(provided, storedToken)) {
+      if (!checkToken(provided, token)) {
         sendJson(res, 401, { error: 'Unauthorized' });
         return;
       }
@@ -101,6 +100,8 @@ export async function startHealthServer<T extends CommandMap>(
 
     // GET /version - no auth
     if (method === 'GET' && url === '/version') {
+      // Field names use snake_case to match the JSON API convention documented in
+      // CLAUDE.md ("GET /version → { version, machine_id, config_dir, pid }").
       sendJson(res, 200, {
         ...(versionExtra ? versionExtra() : {}),
         version: appVersion ?? PACKAGE_VERSION,
@@ -119,9 +120,8 @@ export async function startHealthServer<T extends CommandMap>(
         return;
       }
       const authHeader = req.headers['authorization'] ?? '';
-      const storedToken = (await fs.readFile(tokenPath, 'utf8').catch(() => '')).trim();
       const provided = authHeader.replace(/^Bearer\s+/, '');
-      if (!checkToken(provided, storedToken)) {
+      if (!checkToken(provided, token)) {
         sendJson(res, 401, { error: 'Unauthorized' });
         return;
       }
@@ -129,14 +129,18 @@ export async function startHealthServer<T extends CommandMap>(
       return;
     }
 
+    // Commands returning data (check-update, apply-update) are awaited before sending
+    // the response — the caller needs the result.
+    // Void commands (quit, restart, sync-now) must return quickly: their handlers
+    // use `void` internally to start async work and return immediately, making them
+    // effectively fire-and-forget from the HTTP perspective.
     // POST /:command - auth required
     if (method === 'POST') {
       const commandName = url.slice(1); // remove leading /
       const authHeader = req.headers['authorization'] ?? '';
-      const storedToken = (await fs.readFile(tokenPath, 'utf8').catch(() => '')).trim();
       const provided = authHeader.replace(/^Bearer\s+/, '');
 
-      if (!checkToken(provided, storedToken)) {
+      if (!checkToken(provided, token)) {
         sendJson(res, 401, { error: 'Unauthorized' });
         return;
       }

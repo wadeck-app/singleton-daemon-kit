@@ -64,3 +64,9 @@ export class DaemonVersionError extends Error {
 export class DaemonPortExhaustedError extends Error {
   constructor(message: string) { super(message); this.name = 'DaemonPortExhaustedError'; }
 }
+export class DaemonAuthError extends Error {
+  constructor(message: string) { super(message); this.name = 'DaemonAuthError'; }
+}
+export class DaemonCommandNotFoundError extends Error {
+  constructor(message: string) { super(message); this.name = 'DaemonCommandNotFoundError'; }
+}

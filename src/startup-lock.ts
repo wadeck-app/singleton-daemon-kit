@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { DaemonTakeoverError } from './types.js';
+import { isProcessAlive } from './process-utils.js';
 
 const LOCK_RETRY_INTERVAL_MS = 100;
 const LOCK_TIMEOUT_MS = 10_000;
@@ -8,19 +9,6 @@ const LOCK_TIMEOUT_MS = 10_000;
 interface LockData {
   pid: number;
   startedAt: string;
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err: unknown) {
-    const e = err as NodeJS.ErrnoException;
-    if (e.code === 'ESRCH') return false;
-    // EPERM: process exists but we lack permission
-    if (e.code === 'EPERM') return true;
-    return false;
-  }
 }
 
 /**
@@ -64,7 +52,10 @@ export async function acquireStartupLock(configDir: string): Promise<() => Promi
         const content = await fs.readFile(lockPath, 'utf8');
         const { pid } = JSON.parse(content) as LockData;
         if (!isProcessAlive(pid)) {
-          // Owner is dead — remove stale lock and retry immediately
+          // TOCTOU note: between isProcessAlive() and unlink(), another process may have
+          // written a fresh lock. The unlink removes it, but the next O_EXCL open will
+          // race cleanly — only one caller gets EEXIST. Worst case: one extra retry cycle.
+          // Using OS-level flock would eliminate this window but is not cross-platform.
           await fs.unlink(lockPath).catch(() => {});
           continue;
         }

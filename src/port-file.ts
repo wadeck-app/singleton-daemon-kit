@@ -21,7 +21,7 @@ export async function writePortFile(configDir: string, port: number, pid: number
   };
   const filePath = path.join(configDir, PORT_FILE);
   const tmpPath = filePath + '.tmp';
-  await fs.writeFile(tmpPath, JSON.stringify(data), 'utf8');
+  await fs.writeFile(tmpPath, JSON.stringify(data), { encoding: 'utf8', mode: 0o600 });
   await fs.rename(tmpPath, filePath);
 }
 

@@ -5,29 +5,25 @@ import { readPortFile } from './port-file.js';
 import {
   DaemonNotRunningError,
   DaemonVersionError,
+  DaemonAuthError,
+  DaemonCommandNotFoundError,
   type DaemonClient,
   type CommandMap,
   type CommandName,
   type CommandResult,
 } from './types.js';
+import { isProcessAlive } from './process-utils.js';
 
 const SDK_VERSION = 1;
 
+// NOTE: This extends the spec (which declares createDaemonClient({ configDir })).
+// The `commands` map serves two purposes:
+// 1. TypeScript return-type inference for send<K>()
+// 2. Local fallback execution when no daemon is running (see send() implementation)
+// Consumers that want strict spec compliance can pass an empty object as commands.
 interface ClientOptions<T extends CommandMap> {
   configDir: string;
   commands: T;
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err: unknown) {
-    const e = err as NodeJS.ErrnoException;
-    if (e.code === 'ESRCH') return false;
-    if (e.code === 'EPERM') return true;
-    return false;
-  }
 }
 
 function httpPost(port: number, commandPath: string, token: string, payload?: unknown): Promise<{ status: number; body: Record<string, unknown> }> {
@@ -58,6 +54,10 @@ function httpPost(port: number, commandPath: string, token: string, payload?: un
         });
       }
     );
+    req.setTimeout(5000, () => {
+      req.destroy(new Error('HTTP timeout after 5s'));
+      reject(new Error('HTTP timeout after 5s'));
+    });
     req.on('error', reject);
     if (body) req.write(body);
     req.end();
@@ -80,6 +80,10 @@ function httpGet(port: number, urlPath: string): Promise<{ status: number; body:
         });
       }
     );
+    req.setTimeout(5000, () => {
+      req.destroy(new Error('HTTP timeout after 5s'));
+      reject(new Error('HTTP timeout after 5s'));
+    });
     req.on('error', reject);
     req.end();
   });
@@ -135,8 +139,8 @@ export function createDaemonClient<T extends CommandMap>(options: ClientOptions<
 
       const resp = await httpPost(data.port, command, token, payload);
 
-      if (resp.status === 401) throw new DaemonNotRunningError('Unauthorized - token mismatch');
-      if (resp.status === 404) throw new DaemonNotRunningError(`Unknown command: ${command}`);
+      if (resp.status === 401) throw new DaemonAuthError('Unauthorized - token mismatch');
+      if (resp.status === 404) throw new DaemonCommandNotFoundError(`Unknown command: ${command}`);
       if (resp.status === 500) throw new Error((resp.body.error as string) ?? 'Command failed');
 
       return (resp.body as { result?: unknown }).result as CommandResult<T, K>;

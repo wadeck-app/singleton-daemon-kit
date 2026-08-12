@@ -11,7 +11,7 @@ export async function createDaemon<T extends CommandMap>(options: DaemonOptions<
     commands,
     port,
     idleTimeout = null,
-    drainTimeout = 5000,
+    drainTimeout = 30000,
     health,
     appVersion,
     versionExtra,
@@ -23,7 +23,7 @@ export async function createDaemon<T extends CommandMap>(options: DaemonOptions<
   // both evict the existing daemon, and both start their own health servers.
   const releaseLock = await acquireStartupLock(configDir);
 
-  let serverHandle: Awaited<ReturnType<typeof startHealthServer>>;
+  let serverHandle: Awaited<ReturnType<typeof startHealthServer>> | null = null;
   let actualPort: number;
 
   try {
@@ -47,6 +47,11 @@ export async function createDaemon<T extends CommandMap>(options: DaemonOptions<
     // Step 3: write port file — lock is released only after this so the next
     // waiter sees a fresh, valid port file when it acquires the lock.
     await writePortFile(configDir, actualPort, process.pid);
+  } catch (err) {
+    // If the health server started but writePortFile (or anything after) failed,
+    // close the server to release the port — otherwise it leaks with no port file.
+    if (serverHandle !== null) await serverHandle.close().catch(() => {});
+    throw err;
   } finally {
     await releaseLock();
   }
@@ -55,6 +60,10 @@ export async function createDaemon<T extends CommandMap>(options: DaemonOptions<
   const stopHeartbeat = startHeartbeat(configDir);
 
   // Step 5: start idle timer
+  // idleTimer.reset() is intentionally not wired into the health server command path.
+  // wdrive passes idleTimeout: null — the daemon is designed to run permanently.
+  // Consumers using idleTimeout (e.g. flow-cli) should wire reset() via the hooks
+  // option if needed: hooks.onCommand = () => idleTimer.reset().
   const idleTimer = createIdleTimer(
     idleTimeout ?? null,
     drainTimeout,
@@ -80,7 +89,7 @@ export async function createDaemon<T extends CommandMap>(options: DaemonOptions<
       idleTimer.dispose();
       stopHeartbeat();
       await deletePortFile(configDir);
-      await serverHandle.close();
+      await serverHandle!.close();
       hooks.onShutdown?.(reason);
     },
   };

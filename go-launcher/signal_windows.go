@@ -8,6 +8,10 @@ import (
 	"os/signal"
 )
 
+// SIGTERM is not a real signal on Windows — os.Interrupt (Ctrl+C / SIGBREAK)
+// is the only portable graceful-stop signal. signal_other.go handles SIGTERM
+// for Linux/macOS. Do not add SIGTERM here.
+
 // forwardSignals starts a goroutine that forwards os.Interrupt to cmd.
 // Returns a stop channel: the caller must close it (exactly once) to
 // signal the goroutine to exit. The goroutine never closes this channel —

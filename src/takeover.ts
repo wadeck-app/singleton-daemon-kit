@@ -4,19 +4,7 @@ import { readPortFile, deletePortFile, isFresh } from './port-file.js';
 import { DaemonTakeoverError, type DaemonHooks } from './types.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err: unknown) {
-    const e = err as NodeJS.ErrnoException;
-    if (e.code === 'ESRCH') return false;
-    // EPERM means process exists but we don't have permission
-    if (e.code === 'EPERM') return true;
-    return false;
-  }
-}
+import { isProcessAlive } from './process-utils.js';
 
 async function pollUntilDead(pid: number, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;

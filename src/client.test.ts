@@ -2,7 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createDaemonClient } from './client.js';
 import { createTestDaemon } from './test-harness.js';
 import { writePortFile } from './port-file.js';
-import { DaemonNotRunningError, DaemonVersionError, DaemonPortExhaustedError, type CommandMap } from './types.js';
+import {
+  DaemonNotRunningError,
+  DaemonVersionError,
+  DaemonPortExhaustedError,
+  DaemonAuthError,
+  DaemonCommandNotFoundError,
+  type CommandMap,
+} from './types.js';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
@@ -110,5 +117,50 @@ describe('client', () => {
 
     // After dispose, tmpdir should be gone
     await expect(fs.stat(daemonConfigDir)).rejects.toThrow();
+  });
+
+  it('T-TIMEOUT: send() to a non-responsive server rejects with timeout in < 6s', async () => {
+    // Create a TCP server that accepts connections but never sends a response
+    const server = net.createServer((_socket) => {
+      // Accept connection, do nothing — simulates a blocked/frozen daemon
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as net.AddressInfo).port;
+
+    try {
+      await writePortFile(tmpDir, port, process.pid);
+      await fs.writeFile(path.join(tmpDir, 'health_token'), 'test-token');
+
+      const client = createDaemonClient({ configDir: tmpDir, commands: {} as CommandMap });
+
+      const start = Date.now();
+      await expect(client.send('anything')).rejects.toThrow(/timeout/i);
+      const elapsed = Date.now() - start;
+      expect(elapsed).toBeLessThan(6000);
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  }, 10000);
+
+  it('T-AUTH-ERR: send() when daemon returns 401 → DaemonAuthError (not DaemonNotRunningError)', async () => {
+    const commands = { ping: () => 'pong' } as unknown as CommandMap;
+    await using daemon = await createTestDaemon({ commands });
+
+    // Overwrite the health_token file with a wrong value so the client sends the wrong token
+    await fs.writeFile(path.join(daemon.configDir, 'health_token'), 'wrong-token-value');
+
+    const client = createDaemonClient({ configDir: daemon.configDir, commands });
+    await expect(client.send('ping')).rejects.toThrow(DaemonAuthError);
+    // Must NOT throw DaemonNotRunningError (daemon is running — it just rejected the token)
+    await expect(client.send('ping')).rejects.not.toThrow(DaemonNotRunningError);
+  });
+
+  it('T-CMD-NOT-FOUND: send() for unknown command → DaemonCommandNotFoundError (not DaemonNotRunningError)', async () => {
+    const commands = { ping: () => 'pong' } as unknown as CommandMap;
+    await using daemon = await createTestDaemon({ commands });
+
+    const client = createDaemonClient({ configDir: daemon.configDir, commands: {} as CommandMap });
+    await expect(client.send('nonexistent-command')).rejects.toThrow(DaemonCommandNotFoundError);
+    await expect(client.send('nonexistent-command')).rejects.not.toThrow(DaemonNotRunningError);
   });
 });
