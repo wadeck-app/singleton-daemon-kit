@@ -108,12 +108,14 @@ export function createDaemonClient<T extends CommandMap>(options: ClientOptions<
 
     async send<K extends CommandName<T>>(command: K, payload?: unknown): Promise<CommandResult<T, K>> {
       const data = await readPortFile(configDir);
-      if (!data) {
-        throw new DaemonNotRunningError(`Daemon is not running (no port file found in ${configDir})`);
-      }
+      const localHandler = (options.commands as Record<string, ((...args: unknown[]) => unknown) | undefined>)[command as string];
 
-      if (!isProcessAlive(data.pid)) {
-        throw new DaemonNotRunningError(`Daemon process ${data.pid} is not running`);
+      if (!data || !isProcessAlive(data.pid)) {
+        if (localHandler) {
+          return localHandler(payload) as Promise<CommandResult<T, K>>;
+        }
+        const reason = !data ? `no port file found in ${configDir}` : `Daemon process ${data.pid} is not running`;
+        throw new DaemonNotRunningError(`Daemon is not running (${reason})`);
       }
 
       // Check SDK version compatibility

@@ -21,11 +21,25 @@ afterEach(async () => {
 });
 
 describe('client', () => {
-  it('T16: send() with no port file → DaemonNotRunningError', async () => {
+  it('T16: send() with no port file and no local handler → DaemonNotRunningError', async () => {
     const commands = {} as CommandMap;
     const client = createDaemonClient({ configDir: tmpDir, commands });
     await expect(client.send('foo')).rejects.toThrow(DaemonNotRunningError);
     await expect(client.send('foo')).rejects.toThrow(/no port file found/);
+  });
+
+  it('T16b: send() with no daemon but local handler defined → executes locally, returns result', async () => {
+    const commands = { 'check-update': async () => ({ update_available: true, version: '9.9.9' }) } as unknown as CommandMap;
+    const client = createDaemonClient({ configDir: tmpDir, commands });
+    const result = await client.send('check-update') as { update_available: boolean; version: string };
+    expect(result.update_available).toBe(true);
+    expect(result.version).toBe('9.9.9');
+  });
+
+  it('T16c: send() with no daemon and no handler for that command → DaemonNotRunningError', async () => {
+    const commands = { 'check-update': async () => ({ update_available: false }) } as unknown as CommandMap;
+    const client = createDaemonClient({ configDir: tmpDir, commands });
+    await expect(client.send('unknown-cmd')).rejects.toThrow(DaemonNotRunningError);
   });
 
   it('T17: sdkVersion major mismatch (daemon lower) → DaemonVersionError', async () => {
