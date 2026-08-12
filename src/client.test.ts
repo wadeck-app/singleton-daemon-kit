@@ -120,9 +120,12 @@ describe('client', () => {
   });
 
   it('T-TIMEOUT: send() to a non-responsive server rejects with timeout in < 6s', async () => {
-    // Create a TCP server that accepts connections but never sends a response
-    const server = net.createServer((_socket) => {
-      // Accept connection, do nothing — simulates a blocked/frozen daemon
+    const sockets: import('net').Socket[] = [];
+    // Accept connections but never respond — destroy sockets when client disconnects
+    // so server.close() doesn't hang waiting for open connections.
+    const server = net.createServer((socket) => {
+      sockets.push(socket);
+      socket.on('close', () => { const i = sockets.indexOf(socket); if (i >= 0) sockets.splice(i, 1); });
     });
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     const port = (server.address() as net.AddressInfo).port;
@@ -138,6 +141,8 @@ describe('client', () => {
       const elapsed = Date.now() - start;
       expect(elapsed).toBeLessThan(6000);
     } finally {
+      // Destroy all open sockets first so server.close() resolves immediately
+      sockets.forEach(s => s.destroy());
       await new Promise<void>(resolve => server.close(() => resolve()));
     }
   }, 10000);
