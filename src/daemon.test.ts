@@ -264,6 +264,20 @@ describe('daemon - server leak and token', () => {
   });
 });
 
+describe('daemon - prototype injection', () => {
+  it('T-PROTO: POST /constructor with valid token → 404, not 500 or prototype execution', async () => {
+    const commands = { ping: () => 'pong' } as unknown as CommandMap;
+    await using daemon = await createTestDaemon({ commands });
+
+    const token = await fs.readFile(path.join(daemon.configDir, 'health_token'), 'utf8');
+    const response = await fetch(`http://127.0.0.1:${daemon.port}/constructor`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token.trim()}` },
+    });
+    expect(response.status).toBe(404);
+  });
+});
+
 describe('takeover - race condition', () => {
   it('T-RACE: concurrent createDaemon calls → only one daemon alive at the end', async () => {
     const commands = {} as CommandMap;

@@ -56,7 +56,6 @@ function httpPost(port: number, commandPath: string, token: string, payload?: un
     );
     req.setTimeout(5000, () => {
       req.destroy(new Error('HTTP timeout after 5s'));
-      reject(new Error('HTTP timeout after 5s'));
     });
     req.on('error', reject);
     if (body) req.write(body);
@@ -82,7 +81,6 @@ function httpGet(port: number, urlPath: string): Promise<{ status: number; body:
     );
     req.setTimeout(5000, () => {
       req.destroy(new Error('HTTP timeout after 5s'));
-      reject(new Error('HTTP timeout after 5s'));
     });
     req.on('error', reject);
     req.end();
@@ -137,7 +135,13 @@ export function createDaemonClient<T extends CommandMap>(options: ClientOptions<
       // Read health token
       const token = (await fs.readFile(path.join(configDir, 'health_token'), 'utf8')).trim();
 
-      const resp = await httpPost(data.port, command, token, payload);
+      const resp = await httpPost(data.port, command, token, payload).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('ECONNREFUSED') || msg.includes('ECONNRESET') || msg.includes('timeout')) {
+          throw new DaemonNotRunningError(`Daemon is not running (connection failed: ${msg})`);
+        }
+        throw err;
+      });
 
       if (resp.status === 401) throw new DaemonAuthError('Unauthorized - token mismatch');
       if (resp.status === 404) throw new DaemonCommandNotFoundError(`Unknown command: ${command}`);

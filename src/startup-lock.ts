@@ -52,10 +52,12 @@ export async function acquireStartupLock(configDir: string): Promise<() => Promi
         const content = await fs.readFile(lockPath, 'utf8');
         const { pid } = JSON.parse(content) as LockData;
         if (!isProcessAlive(pid)) {
-          // TOCTOU note: between isProcessAlive() and unlink(), another process may have
-          // written a fresh lock. The unlink removes it, but the next O_EXCL open will
-          // race cleanly — only one caller gets EEXIST. Worst case: one extra retry cycle.
-          // Using OS-level flock would eliminate this window but is not cross-platform.
+          // TOCTOU note: between isProcessAlive(pid) returning false and unlink(), another
+          // process may have written a fresh valid lock. The unlink removes it, but the
+          // subsequent O_EXCL open then races cleanly — only one caller gets EEXIST.
+          // Worst case: dual lock acquisition if the new lock is written AND deleted before
+          // either caller reaches fs.open('wx'). Using OS-level flock would eliminate this
+          // window but is not cross-platform. Acceptable for a single-user local daemon.
           await fs.unlink(lockPath).catch(() => {});
           continue;
         }

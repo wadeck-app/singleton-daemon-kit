@@ -39,12 +39,13 @@ function sendJson(res: http.ServerResponse, status: number, data: unknown): void
 }
 
 function checkToken(provided: string, stored: string): boolean {
+  // HMAC-wrap both inputs to a fixed-length digest before comparing,
+  // ensuring constant-time comparison regardless of input length.
   if (!provided || !stored) return false;
-  if (provided.length !== stored.length) return false;
   try {
-    const a = Buffer.from(provided, 'utf8');
-    const b = Buffer.from(stored, 'utf8');
-    if (a.length !== b.length) return false;
+    const key = Buffer.alloc(1);
+    const a = crypto.createHmac('sha256', key).update(provided).digest();
+    const b = crypto.createHmac('sha256', key).update(stored).digest();
     return crypto.timingSafeEqual(a, b);
   } catch {
     return false;
@@ -145,7 +146,9 @@ export async function startHealthServer<T extends CommandMap>(
         return;
       }
 
-      const handler = commands[commandName];
+      const handler = Object.hasOwn(commands, commandName)
+        ? commands[commandName as keyof T]
+        : undefined;
       if (!handler) {
         sendJson(res, 404, { error: `Unknown command: ${commandName}` });
         return;

@@ -168,4 +168,19 @@ describe('client', () => {
     await expect(client.send('nonexistent-command')).rejects.toThrow(DaemonCommandNotFoundError);
     await expect(client.send('nonexistent-command')).rejects.not.toThrow(DaemonNotRunningError);
   });
+
+  it('T-CONNREFUSED: send() when daemon dies between alive-check and HTTP call → DaemonNotRunningError', async () => {
+    const commands = { ping: () => 'pong' } as unknown as CommandMap;
+    await using daemon = await createTestDaemon({ commands });
+
+    const client = createDaemonClient({ configDir: daemon.configDir, commands: {} as CommandMap });
+
+    // Stop the daemon without waiting so the port file still exists but the server is gone
+    void daemon.stop('command');
+
+    // Attempt send immediately — the process is alive (same process) but port closed
+    // This should throw DaemonNotRunningError (mapped from ECONNREFUSED), not raw Error
+    const err = await client.send('ping').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DaemonNotRunningError);
+  }, 10000);
 });
