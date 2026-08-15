@@ -117,7 +117,7 @@ export async function startHealthServer<T extends CommandMap>(
         pid: process.pid,
         config_dir: configDir,
         sdkVersion: SDK_VERSION,
-        port: (server.address() as net.AddressInfo).port,
+        port: (server.address() as net.AddressInfo | null)?.port ?? actualPort,
       });
       return;
     }
@@ -212,7 +212,8 @@ export async function startHealthServer<T extends CommandMap>(
         break;
       } catch (err: unknown) {
         const e = err as NodeJS.ErrnoException;
-        if (e.code === 'EADDRINUSE' && i < maxAttempts - 1) continue;
+        if (e.code !== 'EADDRINUSE') throw err; // propagate non-bind errors as-is
+        if (i < maxAttempts - 1) continue;
         throw new DaemonPortExhaustedError(
           `Could not bind to any port in range ${basePort}-${basePort + maxAttempts - 1}`
         );
