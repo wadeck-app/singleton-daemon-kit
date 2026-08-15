@@ -49,6 +49,20 @@ function checkToken(provided: string, stored: string): boolean {
   }
 }
 
+// Centralised auth guard — used by all authenticated routes (/quit, /health, POST commands).
+// Sends 401 and returns false if the token is missing or wrong; returns true on success.
+// Avoids duplicating the extraction + checkToken call across multiple routes, which would
+// risk an auth bypass if one copy were missed during a future scheme change.
+function requireAuth(req: http.IncomingMessage, res: http.ServerResponse, token: string): boolean {
+  const authHeader = req.headers['authorization'] ?? '';
+  const provided = authHeader.replace(/^Bearer\s+/, '');
+  if (!checkToken(provided, token)) {
+    sendJson(res, 401, { error: 'Unauthorized' });
+    return false;
+  }
+  return true;
+}
+
 export interface HealthServerOptions<T extends CommandMap> {
   configDir: string;
   commands: T;
@@ -84,12 +98,7 @@ export async function startHealthServer<T extends CommandMap>(
 
     // POST /quit - built-in eviction endpoint, auth required
     if (method === 'POST' && url === '/quit') {
-      const authHeader = req.headers['authorization'] ?? '';
-      const provided = authHeader.replace(/^Bearer\s+/, '');
-      if (!checkToken(provided, token)) {
-        sendJson(res, 401, { error: 'Unauthorized' });
-        return;
-      }
+      if (!requireAuth(req, res, token)) return;
       sendJson(res, 200, { ok: true });
       if (onQuit) {
         // Defer quit so response is fully sent first
@@ -119,12 +128,7 @@ export async function startHealthServer<T extends CommandMap>(
         sendJson(res, 404, { error: 'No health handler configured' });
         return;
       }
-      const authHeader = req.headers['authorization'] ?? '';
-      const provided = authHeader.replace(/^Bearer\s+/, '');
-      if (!checkToken(provided, token)) {
-        sendJson(res, 401, { error: 'Unauthorized' });
-        return;
-      }
+      if (!requireAuth(req, res, token)) return;
       // Wrap health() in try/catch: an uncaught throw here would leave the
       // response unsent and cause ECONNRESET on the client side.
       try {
@@ -147,13 +151,7 @@ export async function startHealthServer<T extends CommandMap>(
     // POST /:command - auth required
     if (method === 'POST') {
       const commandName = url.slice(1); // remove leading /
-      const authHeader = req.headers['authorization'] ?? '';
-      const provided = authHeader.replace(/^Bearer\s+/, '');
-
-      if (!checkToken(provided, token)) {
-        sendJson(res, 401, { error: 'Unauthorized' });
-        return;
-      }
+      if (!requireAuth(req, res, token)) return;
 
       const handler = Object.hasOwn(commands, commandName)
         ? commands[commandName as keyof T]
