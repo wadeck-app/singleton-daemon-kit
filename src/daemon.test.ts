@@ -201,6 +201,21 @@ describe('daemon', () => {
     // Without appVersion, falls back to SDK PACKAGE_VERSION '1.0.0'
     expect(body['version']).toBe('1.0.0');
   });
+
+  it('T-HEALTH-THROWS: GET /health when health callback throws → HTTP 500 (not ECONNRESET)', async () => {
+    const commands = {} as CommandMap;
+    await using daemon = await createTestDaemon({
+      commands,
+      health: () => { throw new Error('boom'); },
+    });
+    const token = (await fs.readFile(path.join(daemon.configDir, 'health_token'), 'utf8')).trim();
+    const response = await fetch(`http://127.0.0.1:${daemon.port}/health`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(response.status).toBe(500);
+    const body = await response.json() as { error: string };
+    expect(body.error).toContain('boom');
+  });
 });
 
 describe('daemon - server leak and token', () => {

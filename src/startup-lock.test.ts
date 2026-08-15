@@ -65,6 +65,28 @@ describe('startup-lock', () => {
   // and throw DaemonTakeoverError within the configured timeout.
   // Before fix: unlink failure is silently swallowed → `continue` bypasses deadline → infinite loop.
   // After fix: deadline is checked when unlink throws non-ENOENT → throws within timeout.
+  // T-LOCK-TIMEOUT-MESSAGE: the error message must contain the caller-supplied timeoutMs,
+  // not the hardcoded LOCK_TIMEOUT_MS (10000).
+  // Before fix: message would always say '10000ms' regardless of the timeoutMs argument.
+  // After fix: message says e.g. '300ms' when acquireStartupLock(dir, 300) is called.
+  it('T-LOCK-TIMEOUT-MESSAGE: error message contains effective timeoutMs (not hardcoded 10000)', async () => {
+    // Write a lock file with a living PID to force timeout
+    const lockPath = path.join(tmpDir, 'config.lock');
+    await fs.writeFile(
+      lockPath,
+      JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }),
+      'utf8',
+    );
+
+    const start = Date.now();
+    const err = await acquireStartupLock(tmpDir, 300).catch((e: unknown) => e);
+    expect(Date.now() - start).toBeLessThan(1000);
+    expect(err).toBeInstanceOf(DaemonTakeoverError);
+    // Must say "300ms" not "10000ms"
+    expect((err as DaemonTakeoverError).message).toContain('300ms');
+    expect((err as DaemonTakeoverError).message).not.toContain('10000ms');
+  });
+
   it('T-EPERM-UNLINK: unlink throws EPERM with dead PID → DaemonTakeoverError within timeout', async () => {
     // Write a lock file with a PID that almost certainly does not exist
     const lockPath = path.join(tmpDir, 'config.lock');

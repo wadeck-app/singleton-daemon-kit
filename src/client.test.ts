@@ -169,6 +169,37 @@ describe('client', () => {
     await expect(client.send('nonexistent-command')).rejects.not.toThrow(DaemonNotRunningError);
   });
 
+  // M1 — T-ENOENT-TOKEN: health_token missing after alive check → DaemonNotRunningError.
+  // Before fix: fs.readFile throws raw ENOENT which propagates as a generic Error.
+  // After fix: ENOENT is caught and re-thrown as DaemonNotRunningError with a clear message.
+  it('T-ENOENT-TOKEN: send() when health_token file is absent → DaemonNotRunningError', async () => {
+    // Write a port file with the current process PID (alive) but no health_token file
+    await writePortFile(tmpDir, 47823, process.pid);
+    // health_token intentionally NOT created
+
+    const client = createDaemonClient({ configDir: tmpDir, commands: {} as CommandMap });
+    await expect(client.send('foo')).rejects.toThrow(DaemonNotRunningError);
+    await expect(client.send('foo')).rejects.toThrow(/health_token/i);
+  });
+
+  // M2 — T-MISSING-SDK-VERSION: port file without sdkVersion field → DaemonVersionError.
+  // Before fix: undefined is treated as legacy (warns but continues), no error thrown.
+  // After fix: undefined ?? 0 gives version 0, which is < SDK_VERSION 1 → DaemonVersionError.
+  it('T-MISSING-SDK-VERSION: send() with port file missing sdkVersion → DaemonVersionError', async () => {
+    // Write a port file WITHOUT sdkVersion field (simulates old daemon)
+    const portFilePath = path.join(tmpDir, 'config.port');
+    await fs.writeFile(portFilePath, JSON.stringify({
+      port: 12345,
+      pid: process.pid,
+      startedAt: new Date().toISOString(),
+      // sdkVersion intentionally absent
+    }));
+    await fs.writeFile(path.join(tmpDir, 'health_token'), 'tok');
+
+    const client = createDaemonClient({ configDir: tmpDir, commands: {} as CommandMap });
+    await expect(client.send('foo')).rejects.toThrow(DaemonVersionError);
+  });
+
   it('T-CONNREFUSED: send() when daemon dies between alive-check and HTTP call → DaemonNotRunningError', async () => {
     const commands = { ping: () => 'pong' } as unknown as CommandMap;
     await using daemon = await createTestDaemon({ commands });

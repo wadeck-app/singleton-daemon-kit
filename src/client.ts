@@ -120,19 +120,31 @@ export function createDaemonClient<T extends CommandMap>(options: ClientOptions<
       }
 
       // Check SDK version compatibility
-      const daemonMajor = data.sdkVersion;
+      // Treat missing sdkVersion (old port file) as version 0 — will fail the version guard.
+      const daemonMajor = data.sdkVersion ?? 0;
       const clientMajor = SDK_VERSION;
       if (daemonMajor < clientMajor) {
         throw new DaemonVersionError(
           `Daemon SDK version ${daemonMajor} is older than client SDK version ${clientMajor}`
         );
-      }
-      if (daemonMajor > clientMajor) {
+      } else if (daemonMajor > clientMajor) {
         console.warn(`Warning: Daemon SDK version ${daemonMajor} is newer than client SDK version ${clientMajor}`);
       }
 
-      // Read health token
-      const token = (await fs.readFile(path.join(configDir, 'health_token'), 'utf8')).trim();
+      // Read health token — ENOENT means the daemon wrote its port file but
+      // the health_token is missing (crash between the two writes). Treat as not running.
+      let token: string;
+      try {
+        token = (await fs.readFile(path.join(configDir, 'health_token'), 'utf8')).trim();
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === 'ENOENT') {
+          throw new DaemonNotRunningError(
+            `Daemon is not running (health_token not found in ${configDir})`
+          );
+        }
+        throw err;
+      }
 
       const resp = await httpPost(data.port, command, token, payload).catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
