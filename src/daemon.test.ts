@@ -417,3 +417,22 @@ describe('daemon - query string routing', () => {
     expect(body.result).toBe('pong');
   });
 });
+
+describe('daemon - server.address() null-safe port', () => {
+  // T-VERSION-PORT: GET /version must return a valid numeric port field.
+  // Covers the null-safe fix: (server.address() as AddressInfo | null)?.port ?? actualPort
+  // Without the fix, server.address() returning null would yield undefined in the response.
+  it('T-VERSION-PORT: GET /version returns a valid numeric port matching the actual port', async () => {
+    const commands = {} as CommandMap;
+    await using daemon = await createTestDaemon({ commands });
+
+    const res = await fetch(`http://127.0.0.1:${daemon.port}/version`);
+    expect(res.ok).toBe(true);
+    const body = await res.json() as Record<string, unknown>;
+    // port must be a positive integer matching the daemon's actual port
+    expect(typeof body['port']).toBe('number');
+    expect(body['port']).toBeGreaterThan(0);
+    expect(body['port']).toBe(daemon.port);
+  });
+});
+
