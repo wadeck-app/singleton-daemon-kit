@@ -103,6 +103,10 @@ export function createDaemonClient<T extends CommandMap>(options: ClientOptions<
     async version(): Promise<{ version: string; pid: number; config_dir: string; sdkVersion: number }> {
       const data = await readPortFile(configDir);
       if (!data) throw new DaemonNotRunningError(`Daemon is not running (no port file found in ${configDir})`);
+      // Mirror send()'s alive check — a stale port file otherwise causes raw ECONNREFUSED.
+      if (!isProcessAlive(data.pid)) {
+        throw new DaemonNotRunningError(`Daemon is not running (process ${data.pid} is not alive)`);
+      }
       const resp = await httpGet(data.port, '/version');
       return resp.body as { version: string; pid: number; config_dir: string; sdkVersion: number };
     },

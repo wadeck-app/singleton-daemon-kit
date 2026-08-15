@@ -200,6 +200,17 @@ describe('client', () => {
     await expect(client.send('foo')).rejects.toThrow(DaemonVersionError);
   });
 
+  // T-VERSION-STALE: version() with stale port file (dead PID) → DaemonNotRunningError.
+  // Before fix: version() calls httpGet without checking isProcessAlive → raw ECONNREFUSED.
+  // After fix: version() checks alive and throws DaemonNotRunningError like send() does.
+  it('T-VERSION-STALE: version() with dead PID in port file → DaemonNotRunningError', async () => {
+    // Write a port file with a PID that certainly doesn't exist
+    await writePortFile(tmpDir, 47823, 999999999);
+
+    const client = createDaemonClient({ configDir: tmpDir, commands: {} as CommandMap });
+    await expect(client.version()).rejects.toThrow(DaemonNotRunningError);
+  });
+
   it('T-CONNREFUSED: send() when daemon dies between alive-check and HTTP call → DaemonNotRunningError', async () => {
     const commands = { ping: () => 'pong' } as unknown as CommandMap;
     await using daemon = await createTestDaemon({ commands });

@@ -62,6 +62,7 @@ export async function acquireStartupLock(configDir: string, timeoutMs?: number):
           // X6 — if unlink fails with a real error (e.g. EPERM), check the deadline
           // before continuing to avoid an infinite spin. ENOENT means another process
           // already deleted it, which is fine — continue as normal.
+          let unlinkBlocked = false;
           await fs.unlink(lockPath).catch((unlinkErr) => {
             const code = (unlinkErr as NodeJS.ErrnoException).code;
             if (code !== 'ENOENT') {
@@ -70,8 +71,15 @@ export async function acquireStartupLock(configDir: string, timeoutMs?: number):
                   `Could not acquire startup lock in ${configDir} within ${timeoutMs ?? LOCK_TIMEOUT_MS}ms`
                 );
               }
+              // Mark that unlink was blocked so we sleep before retrying (avoid busy-spin).
+              unlinkBlocked = true;
             }
           });
+          // Sleep between retries when unlink is persistently blocked (e.g. EPERM) to
+          // avoid spinning the CPU at 100% until the deadline.
+          if (unlinkBlocked) {
+            await new Promise<void>(resolve => setTimeout(resolve, LOCK_RETRY_INTERVAL_MS));
+          }
           continue;
         }
         // Owner is alive — fall through to timed retry
