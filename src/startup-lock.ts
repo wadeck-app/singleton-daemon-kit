@@ -26,7 +26,9 @@ interface LockData {
  */
 export async function acquireStartupLock(configDir: string, timeoutMs?: number): Promise<() => Promise<void>> {
   const lockPath = path.join(configDir, 'config.lock');
-  const deadline = Date.now() + (timeoutMs ?? LOCK_TIMEOUT_MS);
+  // Compute the effective timeout once so all error messages use the same value.
+  const effectiveTimeout = timeoutMs ?? LOCK_TIMEOUT_MS;
+  const deadline = Date.now() + effectiveTimeout;
 
   while (true) {
     try {
@@ -68,7 +70,7 @@ export async function acquireStartupLock(configDir: string, timeoutMs?: number):
             if (code !== 'ENOENT') {
               if (Date.now() >= deadline) {
                 throw new DaemonTakeoverError(
-                  `Could not acquire startup lock in ${configDir} within ${timeoutMs ?? LOCK_TIMEOUT_MS}ms`
+                  `Could not acquire startup lock in ${configDir} within ${effectiveTimeout}ms`
                 );
               }
               // Mark that unlink was blocked so we sleep before retrying (avoid busy-spin).
@@ -90,7 +92,7 @@ export async function acquireStartupLock(configDir: string, timeoutMs?: number):
         // Check deadline first to avoid spinning forever on a persistently invalid lock.
         if (Date.now() >= deadline) {
           throw new DaemonTakeoverError(
-            `Could not acquire startup lock in ${configDir} within ${timeoutMs ?? LOCK_TIMEOUT_MS}ms`
+            `Could not acquire startup lock in ${configDir} within ${effectiveTimeout}ms`
           );
         }
         continue;
@@ -99,7 +101,7 @@ export async function acquireStartupLock(configDir: string, timeoutMs?: number):
       if (Date.now() >= deadline) {
         // Use the effective timeout (caller-supplied or default) in the message.
         throw new DaemonTakeoverError(
-          `Could not acquire startup lock in ${configDir} within ${timeoutMs ?? LOCK_TIMEOUT_MS}ms`
+          `Could not acquire startup lock in ${configDir} within ${effectiveTimeout}ms`
         );
       }
 
