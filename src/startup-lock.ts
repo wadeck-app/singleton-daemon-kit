@@ -58,11 +58,26 @@ export async function acquireStartupLock(configDir: string, timeoutMs?: number):
           // Worst case: dual lock acquisition if the new lock is written AND deleted before
           // either caller reaches fs.open('wx'). Using OS-level flock would eliminate this
           // window but is not cross-platform. Acceptable for a single-user local daemon.
-          await fs.unlink(lockPath).catch(() => {});
+          //
+          // X6 — if unlink fails with a real error (e.g. EPERM), check the deadline
+          // before continuing to avoid an infinite spin. ENOENT means another process
+          // already deleted it, which is fine — continue as normal.
+          await fs.unlink(lockPath).catch((unlinkErr) => {
+            const code = (unlinkErr as NodeJS.ErrnoException).code;
+            if (code !== 'ENOENT') {
+              if (Date.now() >= deadline) {
+                throw new DaemonTakeoverError(
+                  `Could not acquire startup lock in ${configDir} within ${timeoutMs ?? LOCK_TIMEOUT_MS}ms`
+                );
+              }
+            }
+          });
           continue;
         }
         // Owner is alive — fall through to timed retry
-      } catch {
+      } catch (innerErr) {
+        // Re-throw DaemonTakeoverError from the unlink catch above — do not swallow it.
+        if (innerErr instanceof DaemonTakeoverError) throw innerErr;
         // Lock file disappeared or is unreadable (another process deleted it) — retry.
         // Check deadline first to avoid spinning forever on a persistently invalid lock.
         if (Date.now() >= deadline) {
@@ -74,8 +89,9 @@ export async function acquireStartupLock(configDir: string, timeoutMs?: number):
       }
 
       if (Date.now() >= deadline) {
+        // Use the effective timeout (caller-supplied or default) in the message.
         throw new DaemonTakeoverError(
-          `Could not acquire startup lock in ${configDir} within ${LOCK_TIMEOUT_MS}ms`
+          `Could not acquire startup lock in ${configDir} within ${timeoutMs ?? LOCK_TIMEOUT_MS}ms`
         );
       }
 

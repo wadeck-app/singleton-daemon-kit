@@ -39,7 +39,12 @@ export async function createDaemon<T extends CommandMap>(options: DaemonOptions<
       appVersion,
       versionExtra,
       hooks,
-      onQuit: () => handle.stop('command'),
+      // X4 — handle is captured by reference here before it is assigned below (line ~79).
+    // This is safe because onQuit is only ever called via setImmediate() in
+    // health-server.ts, which defers execution past the current tick — by which
+    // point handle has been assigned. Do NOT remove the setImmediate in
+    // health-server.ts without also fixing this forward reference.
+    onQuit: () => handle.stop('command'),
     });
 
     actualPort = serverHandle.port;

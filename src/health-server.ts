@@ -125,7 +125,17 @@ export async function startHealthServer<T extends CommandMap>(
         sendJson(res, 401, { error: 'Unauthorized' });
         return;
       }
-      sendJson(res, 200, health());
+      // Wrap health() in try/catch: an uncaught throw here would leave the
+      // response unsent and cause ECONNRESET on the client side.
+      try {
+        sendJson(res, 200, health());
+      } catch (err: unknown) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        hooks?.onCommandError?.('health', error);
+        if (!res.headersSent) {
+          sendJson(res, 500, { error: `Health check failed: ${error.message}` });
+        }
+      }
       return;
     }
 
@@ -153,11 +163,16 @@ export async function startHealthServer<T extends CommandMap>(
         return;
       }
 
-      // Parse payload
-      let payload: unknown;
+      // Parse payload — reject malformed JSON with 400 rather than silently swallowing it.
+      let payload: unknown = undefined;
       const body = await readBody(req);
       if (body) {
-        try { payload = JSON.parse(body); } catch { payload = undefined; }
+        try {
+          payload = JSON.parse(body);
+        } catch {
+          sendJson(res, 400, { error: 'Invalid JSON body' });
+          return;
+        }
       }
 
       const start = Date.now();

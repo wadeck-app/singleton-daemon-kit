@@ -353,6 +353,37 @@ describe('daemon - keep-alive shutdown', () => {
   }, 5000);
 });
 
+describe('daemon - invalid JSON body', () => {
+  // T-BAD-JSON: sending an invalid JSON body to a known command must return 400.
+  // Before fix: JSON.parse failure is silently swallowed → handler called with undefined payload.
+  // After fix: 400 { error: 'Invalid JSON body' } returned, handler never called.
+  it('T-BAD-JSON: POST with malformed JSON body → 400 Invalid JSON body', async () => {
+    let handlerCalled = false;
+    const commands = {
+      ping: () => {
+        handlerCalled = true;
+        return 'pong';
+      },
+    } as unknown as CommandMap;
+    await using daemon = await createTestDaemon({ commands });
+
+    const token = (await fs.readFile(path.join(daemon.configDir, 'health_token'), 'utf8')).trim();
+    const response = await fetch(`http://127.0.0.1:${daemon.port}/ping`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{not json}',
+    });
+    expect(response.status).toBe(400);
+    const body = await response.json() as { error: string };
+    expect(body.error).toContain('Invalid JSON');
+    // Handler must NOT have been called
+    expect(handlerCalled).toBe(false);
+  });
+});
+
 describe('daemon - query string routing', () => {
   // T-QUERY-STRING: req.url includes query string → /ping?foo=bar must still route to /ping.
   // Before fix: url.slice(1) yields "ping?foo=bar", Object.hasOwn fails → 404.
