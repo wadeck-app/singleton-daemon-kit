@@ -4,8 +4,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { DaemonPortExhaustedError, type CommandMap, type DaemonHooks, type HealthStatus } from './types.js';
-
-const SDK_VERSION = 1;
+import { SDK_VERSION } from './constants.js';
 const PACKAGE_VERSION = '1.0.0';
 
 async function tryListen(server: http.Server, port: number): Promise<number> {
@@ -39,14 +38,12 @@ function sendJson(res: http.ServerResponse, status: number, data: unknown): void
 }
 
 function checkToken(provided: string, stored: string): boolean {
-  // HMAC-wrap both inputs to a fixed-length digest before comparing,
-  // ensuring constant-time comparison regardless of input length.
   if (!provided || !stored) return false;
+  // Both tokens are always 32 hex chars (randomBytes(16).toString('hex')),
+  // so the length check leaks no timing information.
+  if (provided.length !== stored.length) return false;
   try {
-    const key = Buffer.alloc(1);
-    const a = crypto.createHmac('sha256', key).update(provided).digest();
-    const b = crypto.createHmac('sha256', key).update(stored).digest();
-    return crypto.timingSafeEqual(a, b);
+    return crypto.timingSafeEqual(Buffer.from(provided, 'utf8'), Buffer.from(stored, 'utf8'));
   } catch {
     return false;
   }
@@ -80,7 +77,9 @@ export async function startHealthServer<T extends CommandMap>(
   await fs.writeFile(tokenPath, token, { mode: 0o600 });
 
   const server = http.createServer(async (req, res) => {
-    const url = req.url ?? '/';
+    // Strip query string before routing so /quit?reason=x matches /quit, etc.
+    const rawUrl = req.url ?? '/';
+    const url = new URL(rawUrl, 'http://localhost').pathname;
     const method = req.method ?? 'GET';
 
     // POST /quit - built-in eviction endpoint, auth required
@@ -212,6 +211,11 @@ export async function startHealthServer<T extends CommandMap>(
     port: actualPort!,
     close(): Promise<void> {
       return new Promise((resolve, reject) => {
+        // Destroy all keep-alive connections so server.close() resolves promptly.
+        // Node 18.2+ provides server.closeAllConnections(); fall back to manual tracking.
+        if (typeof (server as unknown as { closeAllConnections?: () => void }).closeAllConnections === 'function') {
+          (server as unknown as { closeAllConnections: () => void }).closeAllConnections();
+        }
         server.close((err) => {
           if (err) reject(err);
           else resolve();

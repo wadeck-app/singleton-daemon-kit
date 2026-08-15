@@ -319,3 +319,55 @@ describe('takeover - race condition', () => {
     expect(aliveCount).toBe(1);
   });
 });
+
+describe('daemon - keep-alive shutdown', () => {
+  // T-CLOSE-KEEPALIVE: server.close() must resolve even with open keep-alive connections.
+  // Before fix: server.close() callback never fires → daemon.stop() hangs.
+  // After fix: closeAllConnections() destroys idle sockets → server.close() resolves promptly.
+  it('T-CLOSE-KEEPALIVE: daemon.stop() resolves within 2s despite open keep-alive connection', async () => {
+    const daemon = await createTestDaemon({ commands: {} as CommandMap });
+
+    // Open a raw TCP keep-alive connection: HTTP/1.1 without Connection: close
+    const socket = new net.Socket();
+    await new Promise<void>((resolve, reject) => {
+      socket.connect(daemon.port, '127.0.0.1', resolve);
+      socket.once('error', reject);
+    });
+    socket.write('GET /version HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n');
+    // Give the server time to respond and keep the connection open
+    await new Promise<void>(resolve => setTimeout(resolve, 100));
+
+    try {
+      const start = Date.now();
+      await Promise.race([
+        daemon.stop('command'),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('stop() timed out after 2s')), 2000)
+        ),
+      ]);
+      expect(Date.now() - start).toBeLessThan(2000);
+    } finally {
+      socket.destroy();
+      await fs.rm(daemon.configDir, { recursive: true, force: true });
+    }
+  }, 5000);
+});
+
+describe('daemon - query string routing', () => {
+  // T-QUERY-STRING: req.url includes query string → /ping?foo=bar must still route to /ping.
+  // Before fix: url.slice(1) yields "ping?foo=bar", Object.hasOwn fails → 404.
+  // After fix: URL.pathname strips query → correct command is found → 200.
+  it('T-QUERY-STRING: POST /ping?foo=bar with valid token routes to ping handler', async () => {
+    const commands = { ping: () => 'pong' } as unknown as CommandMap;
+    await using daemon = await createTestDaemon({ commands });
+
+    const token = (await fs.readFile(path.join(daemon.configDir, 'health_token'), 'utf8')).trim();
+    const response = await fetch(`http://127.0.0.1:${daemon.port}/ping?foo=bar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json() as { ok: boolean; result: unknown };
+    expect(body.result).toBe('pong');
+  });
+});

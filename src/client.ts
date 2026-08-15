@@ -13,8 +13,7 @@ import {
   type CommandResult,
 } from './types.js';
 import { isProcessAlive } from './process-utils.js';
-
-const SDK_VERSION = 1;
+import { SDK_VERSION } from './constants.js';
 
 // NOTE: This extends the spec (which declares createDaemonClient({ configDir })).
 // The `commands` map serves two purposes:

@@ -24,9 +24,9 @@ interface LockData {
  *
  * Throws DaemonTakeoverError if the lock cannot be acquired within LOCK_TIMEOUT_MS.
  */
-export async function acquireStartupLock(configDir: string): Promise<() => Promise<void>> {
+export async function acquireStartupLock(configDir: string, timeoutMs?: number): Promise<() => Promise<void>> {
   const lockPath = path.join(configDir, 'config.lock');
-  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  const deadline = Date.now() + (timeoutMs ?? LOCK_TIMEOUT_MS);
 
   while (true) {
     try {
@@ -63,7 +63,13 @@ export async function acquireStartupLock(configDir: string): Promise<() => Promi
         }
         // Owner is alive — fall through to timed retry
       } catch {
-        // Lock file disappeared or is unreadable (another process deleted it) — retry
+        // Lock file disappeared or is unreadable (another process deleted it) — retry.
+        // Check deadline first to avoid spinning forever on a persistently invalid lock.
+        if (Date.now() >= deadline) {
+          throw new DaemonTakeoverError(
+            `Could not acquire startup lock in ${configDir} within ${timeoutMs ?? LOCK_TIMEOUT_MS}ms`
+          );
+        }
         continue;
       }
 
