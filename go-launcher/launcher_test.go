@@ -2,10 +2,12 @@ package launcher
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -167,5 +169,126 @@ func TestHTTPDispatch_unauthorized(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", resp.StatusCode)
+	}
+}
+
+// --- formatDaemonNotRunning ---
+
+func TestFormatDaemonNotRunning(t *testing.T) {
+	msg := formatDaemonNotRunning("/home/user/.wdrive")
+	if !strings.Contains(msg, "wdrive daemon is not running") {
+		t.Errorf("expected 'wdrive daemon is not running' in %q", msg)
+	}
+	if !strings.Contains(msg, filepath.Join("/home/user/.wdrive", "logs")) {
+		t.Errorf("expected log dir in %q", msg)
+	}
+	if !strings.Contains(msg, "Start it with: wdrive") {
+		t.Errorf("expected start hint in %q", msg)
+	}
+}
+
+// --- formatDaemonNotResponding ---
+
+func TestFormatDaemonNotResponding(t *testing.T) {
+	msg := formatDaemonNotResponding(47823, "/home/user/.wdrive")
+	if !strings.Contains(msg, "47823") {
+		t.Errorf("expected port in %q", msg)
+	}
+	if !strings.Contains(msg, filepath.Join("/home/user/.wdrive", "logs")) {
+		t.Errorf("expected log dir in %q", msg)
+	}
+	if !strings.Contains(msg, "To restart: wdrive") {
+		t.Errorf("expected restart hint in %q", msg)
+	}
+}
+
+// --- formatHTTPError ---
+
+func TestFormatHTTPError_401(t *testing.T) {
+	msg := formatHTTPError(401, "quit", "/home/.wdrive")
+	if !strings.Contains(msg, "Authentication error") {
+		t.Errorf("expected auth error in %q", msg)
+	}
+}
+
+func TestFormatHTTPError_404(t *testing.T) {
+	msg := formatHTTPError(404, "unknown-cmd", "/home/.wdrive")
+	if !strings.Contains(msg, "unknown-cmd") {
+		t.Errorf("expected command name in %q", msg)
+	}
+	if !strings.Contains(msg, "wdrive --help") {
+		t.Errorf("expected help hint in %q", msg)
+	}
+}
+
+func TestFormatHTTPError_500(t *testing.T) {
+	msg := formatHTTPError(500, "quit", "/home/.wdrive")
+	if !strings.Contains(msg, "internal error") {
+		t.Errorf("expected internal error in %q", msg)
+	}
+	if !strings.Contains(msg, filepath.Join("/home/.wdrive", "logs")) {
+		t.Errorf("expected log dir in %q", msg)
+	}
+}
+
+func TestFormatHTTPError_other(t *testing.T) {
+	msg := formatHTTPError(503, "quit", "/home/.wdrive")
+	if !strings.Contains(msg, "503") {
+		t.Errorf("expected status code in %q", msg)
+	}
+	if !strings.Contains(msg, filepath.Join("/home/.wdrive", "logs")) {
+		t.Errorf("expected log dir in %q", msg)
+	}
+}
+
+// --- formatNodeStartError ---
+
+func TestFormatNodeStartError(t *testing.T) {
+	err := fmt.Errorf("exec: not found")
+	msg := formatNodeStartError("/path/to/wdrive.cjs", err)
+	if !strings.Contains(msg, "wdrive.cjs") {
+		t.Errorf("expected script name in %q", msg)
+	}
+	if !strings.Contains(msg, "exec: not found") {
+		t.Errorf("expected error in %q", msg)
+	}
+	if !strings.Contains(msg, "node is in PATH") {
+		t.Errorf("expected PATH hint in %q", msg)
+	}
+}
+
+// --- formatSentinelReadError ---
+
+func TestFormatSentinelReadError_notExist(t *testing.T) {
+	msg := formatSentinelReadError("/config/config.restart", os.ErrNotExist)
+	if !strings.Contains(msg, "Exiting cleanly") {
+		t.Errorf("expected clean exit message in %q", msg)
+	}
+}
+
+func TestFormatSentinelReadError_other(t *testing.T) {
+	err := fmt.Errorf("permission denied")
+	msg := formatSentinelReadError("/config/config.restart", err)
+	if !strings.Contains(msg, "permission denied") {
+		t.Errorf("expected error in %q", msg)
+	}
+	if !strings.Contains(msg, "/config/config.restart") {
+		t.Errorf("expected path in %q", msg)
+	}
+}
+
+// --- writeLauncherPIDFile ---
+
+func TestWriteLauncherPIDFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeLauncherPIDFile(dir, 12345); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "config.launcher-pid"))
+	if err != nil {
+		t.Fatalf("could not read PID file: %v", err)
+	}
+	if string(data) != "12345" {
+		t.Errorf("expected '12345', got %q", string(data))
 	}
 }
