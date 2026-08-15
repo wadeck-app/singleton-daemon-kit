@@ -137,6 +137,24 @@ EOF
 # Copy go.sum (the library's sum file covers all deps)
 cp "$SCRIPT_DIR/go.sum" "$TMPDIR/go.sum"
 
+# Embed Windows version info (FileDescription, ProductName, etc.) via goversioninfo.
+# resource.syso is picked up automatically by `go build` for GOOS=windows.
+# Non-fatal: if goversioninfo is absent the build still succeeds without version info.
+VERSIONINFO_SRC="$SCRIPT_DIR/versioninfo.json"
+if [[ -f "$VERSIONINFO_SRC" ]]; then
+  cp "$VERSIONINFO_SRC" "$TMPDIR/versioninfo.json"
+  if command -v goversioninfo &>/dev/null; then
+    echo "Generating Windows resource file (resource.syso)..."
+    if (cd "$TMPDIR" && goversioninfo -o resource.syso versioninfo.json); then
+      echo "  resource.syso generated"
+    else
+      echo "  goversioninfo failed (non-fatal, skipping)"
+    fi
+  else
+    echo "  goversioninfo not in PATH — skipping Windows resource embedding"
+  fi
+fi
+
 echo "Generated main.go at $TMPDIR/main.go"
 echo "Building 3 targets for $APP_NAME..."
 
