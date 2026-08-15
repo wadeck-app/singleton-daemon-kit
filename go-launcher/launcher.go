@@ -40,11 +40,26 @@ type Config struct {
 
 	// DefaultPort is used for error messages when config.port is absent. Defaults to 47823.
 	DefaultPort int
+
+	// AppName is the binary name used in user-facing error messages (e.g. "wdrive").
+	// Defaults to the executable basename when empty.
+	AppName string
 }
 
 // Run is the launcher entrypoint — it never returns.
 // It inspects os.Args and either dispatches a CLI command via HTTP
 // or spawns the Node.js daemon process.
+// --help, --version and any other flags not in CLIFlags are passed through to Node.
+func appName(cfg Config) string {
+	if cfg.AppName != "" {
+		return cfg.AppName
+	}
+	if exe, err := os.Executable(); err == nil {
+		return strings.TrimSuffix(filepath.Base(exe), ".exe")
+	}
+	return "app"
+}
+
 func Run(cfg Config) {
 	if cfg.DefaultPort == 0 {
 		cfg.DefaultPort = 47823
@@ -76,14 +91,14 @@ func runCLIDispatch(cfg Config, args []string) {
 	pf, err := readPortFile(cfg.ConfigDir)
 	if err != nil {
 		logError(cfg.ConfigDir, "dispatch", err.Error())
-		fmt.Fprintln(os.Stderr, formatDaemonNotRunning(cfg.ConfigDir))
+		fmt.Fprintln(os.Stderr, formatDaemonNotRunning(appName(cfg), cfg.ConfigDir))
 		os.Exit(1)
 	}
 
 	token, err := readHealthToken(cfg.ConfigDir)
 	if err != nil {
 		logError(cfg.ConfigDir, "dispatch", err.Error())
-		fmt.Fprintln(os.Stderr, formatDaemonNotRunning(cfg.ConfigDir))
+		fmt.Fprintln(os.Stderr, formatDaemonNotRunning(appName(cfg), cfg.ConfigDir))
 		os.Exit(1)
 	}
 
@@ -127,7 +142,7 @@ func runCLIDispatch(cfg Config, args []string) {
 	resp, err := client.Do(req)
 	if err != nil {
 		logError(cfg.ConfigDir, "dispatch", fmt.Sprintf("HTTP error: %v", err))
-		fmt.Fprintln(os.Stderr, formatDaemonNotResponding(pf.Port, cfg.ConfigDir))
+		fmt.Fprintln(os.Stderr, formatDaemonNotResponding(appName(cfg), pf.Port, cfg.ConfigDir))
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
@@ -135,7 +150,7 @@ func runCLIDispatch(cfg Config, args []string) {
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		logError(cfg.ConfigDir, "dispatch", fmt.Sprintf("HTTP %d: %s", resp.StatusCode, body))
-		fmt.Fprintln(os.Stderr, formatHTTPError(resp.StatusCode, command, cfg.ConfigDir))
+		fmt.Fprintln(os.Stderr, formatHTTPError(appName(cfg), resp.StatusCode, command, cfg.ConfigDir))
 		os.Exit(1)
 	}
 
@@ -150,7 +165,6 @@ func runDaemon(cfg Config, args []string) {
 	nodePath, err := exec.LookPath("node")
 	if err != nil {
 		logError(cfg.ConfigDir, "launcher", "node not found in PATH — install Node.js and ensure it is in PATH")
-		fmt.Fprintln(os.Stderr, "Error: node not found in PATH — install Node.js and ensure it is in PATH")
 		os.Exit(1)
 	}
 
@@ -166,12 +180,11 @@ func runDaemon(cfg Config, args []string) {
 	cmd.WaitDelay = waitDelay
 	setCmdFlags(cmd)
 
-	fmt.Fprintf(os.Stderr, "[launcher] configDir=%s\n", cfg.ConfigDir)
+	logInfo(cfg.ConfigDir, "launcher", fmt.Sprintf("configDir=%s", cfg.ConfigDir))
 	logInfo(cfg.ConfigDir, "launcher", fmt.Sprintf("spawning %s %s", nodePath, strings.Join(scriptArgs, " ")))
 
 	if err := cmd.Start(); err != nil {
-		logError(cfg.ConfigDir, "launcher", fmt.Sprintf("failed to start node: %v", err))
-		fmt.Fprintln(os.Stderr, formatNodeStartError(cfg.NodeScript, err))
+		logError(cfg.ConfigDir, "launcher", formatNodeStartError(cfg.NodeScript, err))
 		os.Exit(1)
 	}
 
@@ -180,7 +193,6 @@ func runDaemon(cfg Config, args []string) {
 		logWarn(cfg.ConfigDir, "launcher", fmt.Sprintf("could not write launcher PID file: %v", pidErr))
 	}
 	logInfo(cfg.ConfigDir, "launcher", fmt.Sprintf("PIDs: launcher=%d node=%d", launcherPID, cmd.Process.Pid))
-	fmt.Fprintf(os.Stderr, "[launcher] PIDs: launcher=%d node=%d\n", launcherPID, cmd.Process.Pid)
 
 	if err := assignJobObject(cmd); err != nil {
 		logWarn(cfg.ConfigDir, "launcher", fmt.Sprintf("Job Object setup failed (non-fatal): %v", err))
@@ -219,24 +231,18 @@ func runDaemon(cfg Config, args []string) {
 	if exitCode == 0 {
 		if _, err := os.Stat(sentinelPath); err == nil {
 			logInfo(cfg.ConfigDir, "launcher", "restart sentinel detected — relaunching")
-			fmt.Fprintln(os.Stderr, "[launcher] restart sentinel detected — relaunching")
 			if removeErr := os.Remove(sentinelPath); removeErr == nil {
 				runDaemon(cfg, args)
 				return
 			} else {
-				msg := fmt.Sprintf("restart sentinel found but could not remove (%v) — not relaunching", removeErr)
-				logWarn(cfg.ConfigDir, "launcher", msg)
-				fmt.Fprintln(os.Stderr, "[launcher] WARN:", msg)
-				fmt.Fprintln(os.Stderr, "To restart manually: wdrive")
+				logWarn(cfg.ConfigDir, "launcher", fmt.Sprintf("restart sentinel found but could not remove (%v) — not relaunching", removeErr))
 			}
 		} else {
 			sentinelMsg := formatSentinelReadError(sentinelPath, err)
 			if os.IsNotExist(err) {
 				logInfo(cfg.ConfigDir, "launcher", sentinelMsg)
-				fmt.Fprintln(os.Stderr, "[launcher]", sentinelMsg)
 			} else {
 				logWarn(cfg.ConfigDir, "launcher", sentinelMsg)
-				fmt.Fprintln(os.Stderr, "[launcher] WARN:", sentinelMsg)
 			}
 		}
 	}

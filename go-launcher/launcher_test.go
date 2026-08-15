@@ -175,14 +175,14 @@ func TestHTTPDispatch_unauthorized(t *testing.T) {
 // --- formatDaemonNotRunning ---
 
 func TestFormatDaemonNotRunning(t *testing.T) {
-	msg := formatDaemonNotRunning("/home/user/.wdrive")
-	if !strings.Contains(msg, "wdrive daemon is not running") {
-		t.Errorf("expected 'wdrive daemon is not running' in %q", msg)
+	msg := formatDaemonNotRunning("myapp", "/home/user/.wdrive")
+	if !strings.Contains(msg, "myapp daemon is not running") {
+		t.Errorf("expected app name in %q", msg)
 	}
 	if !strings.Contains(msg, filepath.Join("/home/user/.wdrive", "logs")) {
 		t.Errorf("expected log dir in %q", msg)
 	}
-	if !strings.Contains(msg, "Start it with: wdrive") {
+	if !strings.Contains(msg, "Start it with: myapp") {
 		t.Errorf("expected start hint in %q", msg)
 	}
 }
@@ -190,14 +190,14 @@ func TestFormatDaemonNotRunning(t *testing.T) {
 // --- formatDaemonNotResponding ---
 
 func TestFormatDaemonNotResponding(t *testing.T) {
-	msg := formatDaemonNotResponding(47823, "/home/user/.wdrive")
+	msg := formatDaemonNotResponding("myapp", 47823, "/home/user/.wdrive")
 	if !strings.Contains(msg, "47823") {
 		t.Errorf("expected port in %q", msg)
 	}
 	if !strings.Contains(msg, filepath.Join("/home/user/.wdrive", "logs")) {
 		t.Errorf("expected log dir in %q", msg)
 	}
-	if !strings.Contains(msg, "To restart: wdrive") {
+	if !strings.Contains(msg, "To restart: myapp") {
 		t.Errorf("expected restart hint in %q", msg)
 	}
 }
@@ -205,24 +205,24 @@ func TestFormatDaemonNotResponding(t *testing.T) {
 // --- formatHTTPError ---
 
 func TestFormatHTTPError_401(t *testing.T) {
-	msg := formatHTTPError(401, "quit", "/home/.wdrive")
+	msg := formatHTTPError("myapp", 401, "quit", "/home/.wdrive")
 	if !strings.Contains(msg, "Authentication error") {
 		t.Errorf("expected auth error in %q", msg)
 	}
 }
 
 func TestFormatHTTPError_404(t *testing.T) {
-	msg := formatHTTPError(404, "unknown-cmd", "/home/.wdrive")
+	msg := formatHTTPError("myapp", 404, "unknown-cmd", "/home/.wdrive")
 	if !strings.Contains(msg, "unknown-cmd") {
 		t.Errorf("expected command name in %q", msg)
 	}
-	if !strings.Contains(msg, "wdrive --help") {
+	if !strings.Contains(msg, "myapp --help") {
 		t.Errorf("expected help hint in %q", msg)
 	}
 }
 
 func TestFormatHTTPError_500(t *testing.T) {
-	msg := formatHTTPError(500, "quit", "/home/.wdrive")
+	msg := formatHTTPError("myapp", 500, "quit", "/home/.wdrive")
 	if !strings.Contains(msg, "internal error") {
 		t.Errorf("expected internal error in %q", msg)
 	}
@@ -232,7 +232,7 @@ func TestFormatHTTPError_500(t *testing.T) {
 }
 
 func TestFormatHTTPError_other(t *testing.T) {
-	msg := formatHTTPError(503, "quit", "/home/.wdrive")
+	msg := formatHTTPError("myapp", 503, "quit", "/home/.wdrive")
 	if !strings.Contains(msg, "503") {
 		t.Errorf("expected status code in %q", msg)
 	}

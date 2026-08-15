@@ -78,6 +78,19 @@ auth-type=legacy
 
 Publishing happens automatically on every push to `main` via `.github/workflows/publish.yml`.
 
+## Go launcher — built-in flags
+
+The Go launcher handles `--help`, `-h`, and `--version` automatically before any dispatch or daemon logic runs. Do **not** add these to `cliFlags` in your `launcher.config.json` — they are reserved.
+
+| Flag | Behaviour |
+|------|-----------|
+| `--help`, `-h` | Print usage, commands, and options then exit 0 |
+| `--version` | Print `<appName> version <version>` then exit 0 |
+
+The version string is injected at build time via `-ldflags "-X main.version=<value>"` in `build.sh`. At runtime it is passed through `Config.Version`; if empty, `--version` prints `unknown`.
+
+`Config.CLIDescriptions` maps each flag in `CLIFlags` to its one-line description shown in `--help`. Missing keys are shown with no description (no error). In `launcher.config.json`, populate the optional `cliFlagDescriptions` object.
+
 ## Development
 
 ```sh

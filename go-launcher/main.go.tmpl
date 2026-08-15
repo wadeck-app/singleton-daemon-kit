@@ -19,6 +19,7 @@ func main() {
 	launcher.Run(launcher.Config{
 		ConfigDir:  configDir,
 		NodeScript: filepath.Join(exeDir, "{{.NodeScript}}"),
+		AppName:    "{{.AppName}}",
 		CLIFlags: []string{
 {{range .CLIFlags}}			"{{.}}",
 {{end}}		},

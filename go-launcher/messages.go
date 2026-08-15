@@ -7,32 +7,34 @@ import (
 )
 
 // formatDaemonNotRunning returns a user-friendly message when the daemon is not running.
-func formatDaemonNotRunning(configDir string) string {
+func formatDaemonNotRunning(app, configDir string) string {
 	return fmt.Sprintf(
-		"wdrive daemon is not running.\nStart it with: wdrive\nLog directory: %s/",
+		"%s daemon is not running.\nStart it with: %s\nLog directory: %s/",
+		app, app,
 		filepath.Join(configDir, "logs"),
 	)
 }
 
 // formatDaemonNotResponding returns a user-friendly message when the daemon does not respond.
-func formatDaemonNotResponding(port int, configDir string) string {
+func formatDaemonNotResponding(app string, port int, configDir string) string {
 	return fmt.Sprintf(
-		"wdrive daemon is not responding (port %d).\nThe daemon may have crashed. Check logs: %s/\nTo restart: wdrive",
-		port,
+		"%s daemon is not responding (port %d).\nThe daemon may have crashed. Check logs: %s/\nTo restart: %s",
+		app, port,
 		filepath.Join(configDir, "logs"),
+		app,
 	)
 }
 
 // formatHTTPError returns a status-specific user-friendly message for non-200 HTTP responses.
-func formatHTTPError(statusCode int, command, configDir string) string {
+func formatHTTPError(app string, statusCode int, command, configDir string) string {
 	logsDir := filepath.Join(configDir, "logs") + "/"
 	switch statusCode {
 	case 401:
-		return "Authentication error — health token mismatch. Restart wdrive."
+		return fmt.Sprintf("Authentication error — health token mismatch. Restart %s.", app)
 	case 404:
-		return fmt.Sprintf("Unknown command '%s'. Run wdrive --help for available commands.", command)
+		return fmt.Sprintf("Unknown command '%s'. Run %s --help for available commands.", command, app)
 	case 500:
-		return fmt.Sprintf("wdrive daemon returned an internal error. Check logs: %s", logsDir)
+		return fmt.Sprintf("%s daemon returned an internal error. Check logs: %s", app, logsDir)
 	default:
 		return fmt.Sprintf("Unexpected response from daemon (status %d). Check logs: %s", statusCode, logsDir)
 	}
@@ -63,3 +65,4 @@ func writeLauncherPIDFile(configDir string, pid int) error {
 	pidPath := filepath.Join(configDir, "config.launcher-pid")
 	return os.WriteFile(pidPath, []byte(fmt.Sprintf("%d", pid)), 0o644)
 }
+

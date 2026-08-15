@@ -45,6 +45,7 @@ fi
 
 # --- Parse config.json using node ---
 APP_NAME=$(node -e "const c=require('$CONFIG_FILE'); process.stdout.write(c.appName)")
+DISPLAY_NAME=$(node -e "const c=require('$CONFIG_FILE'); process.stdout.write(c.displayName || c.appName)")
 NODE_SCRIPT=$(node -e "const c=require('$CONFIG_FILE'); process.stdout.write(c.nodeScript)")
 DEFAULT_CONFIG_DIR=$(node -e "const c=require('$CONFIG_FILE'); process.stdout.write(c.defaultConfigDir)")
 # CLIFlags as a JSON array string, used below for template generation
@@ -92,9 +93,10 @@ const cliFlags = JSON.parse(cliFlagsJson);
 const flagLines = cliFlags.map(f => `\t\t\t"${f}",`).join('\n');
 
 let tmpl = fs.readFileSync(templateFile, 'utf8');
+tmpl = tmpl.replace(/\{\{\.AppName\}\}/g, appName);
 tmpl = tmpl.replace(/\{\{\.DefaultConfigDir\}\}/g, defaultConfigDir);
 tmpl = tmpl.replace(/\{\{\.NodeScript\}\}/g, nodeScript);
-// Replace the range block with the actual flag lines
+// Replace the CLIFlags range block
 tmpl = tmpl.replace(/\{\{range \.CLIFlags\}\}.*?\{\{end\}\}/s, flagLines + '\n');
 
 fs.writeFileSync(path.join(outDir, 'main.go'), tmpl, 'utf8');
@@ -142,7 +144,9 @@ cp "$SCRIPT_DIR/go.sum" "$TMPDIR/go.sum"
 # Non-fatal: if goversioninfo is absent the build still succeeds without version info.
 VERSIONINFO_SRC="$SCRIPT_DIR/versioninfo.json"
 if [[ -f "$VERSIONINFO_SRC" ]]; then
-  cp "$VERSIONINFO_SRC" "$TMPDIR/versioninfo.json"
+  sed -e "s/{{APP_NAME}}/${APP_NAME}/g" \
+      -e "s/{{DISPLAY_NAME}}/${DISPLAY_NAME}/g" \
+      "$VERSIONINFO_SRC" > "$TMPDIR/versioninfo.json"
   if command -v goversioninfo &>/dev/null; then
     echo "Generating Windows resource file (resource.syso)..."
     if (cd "$TMPDIR" && goversioninfo -o resource.syso versioninfo.json); then

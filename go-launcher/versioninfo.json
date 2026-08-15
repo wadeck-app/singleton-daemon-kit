@@ -11,14 +11,14 @@
   "StringFileInfo": {
     "Comments":         "",
     "CompanyName":      "",
-    "FileDescription":  "WDrive",
+    "FileDescription":  "{{DISPLAY_NAME}}",
     "FileVersion":      "1.0.0.0",
-    "InternalName":     "wdrive",
+    "InternalName":     "{{APP_NAME}}",
     "LegalCopyright":   "",
     "LegalTrademarks":  "",
-    "OriginalFilename": "wdrive.exe",
+    "OriginalFilename": "{{APP_NAME}}.exe",
     "PrivateBuild":     "",
-    "ProductName":      "WDrive",
+    "ProductName":      "{{DISPLAY_NAME}}",
     "ProductVersion":   "1.0.0.0",
     "SpecialBuild":     ""
   },

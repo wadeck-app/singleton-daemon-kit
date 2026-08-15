@@ -36,6 +36,10 @@ func openLogFile(configDir string) error {
 	return nil
 }
 
+// logWrite writes to stderr unconditionally, and additionally to the daily log
+// file when configDir is non-empty and the file can be opened.
+// NEVER add a separate fmt.Fprintf(os.Stderr, ...) alongside a logInfo/logWarn/logError
+// call — that produces duplicate output. Use the log functions exclusively.
 func logWrite(configDir, level, category, msg string) {
 	logMu.Lock()
 	defer logMu.Unlock()
