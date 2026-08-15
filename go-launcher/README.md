@@ -6,20 +6,23 @@ Go package that wraps a Node.js CLI daemon in a named `.exe`.
 
 On Windows, all Node.js processes appear as `node.exe` in Task Manager.
 This package produces a properly named binary (`wdrive.exe`, `flow-cli.exe`, etc.)
-that is visible by name, while keeping Node.js as the actual daemon runtime.
+visible by name, while keeping Node.js as the actual daemon runtime.
 
-## What it does
+## Two modes
 
-Two modes, selected automatically from `os.Args`:
+Selected automatically from `os.Args`:
 
-- **CLI dispatch** - when a recognised flag (`--quit`, `--sync-now`, ...) is present:
-  reads `config.port` + `health_token`, sends `POST /<command>` to the daemon, prints
-  the result, exits. Node.js is never spawned.
+- **CLI dispatch** — a flag in `CLIFlags` is present: reads `config.port` + `health_token`, sends `POST /<command>` to the running daemon, prints the result, exits. Node.js is never spawned.
+- **Daemon mode** — no `CLIFlags` flag present: spawns `node <script> <args>` with `CREATE_NO_WINDOW`, attaches a Windows Job Object, forwards `Ctrl+C`, waits for node, forwards exit code.
 
-- **Daemon mode** - no recognised flag: spawns `node <script> <args>` with
-  `CREATE_NO_WINDOW` (no console popup), attaches a Windows Job Object so that
-  killing the wrapper also kills node, forwards `Ctrl+C` from the terminal to node,
-  stays alive until node exits, and forwards the exit code.
+### What belongs in `CLIFlags`
+
+Only "remote control pure" commands — flags that make no sense without a running daemon and need no fallback:
+`--quit`, `--restart`, `--sync-now`, `--pause-sync`, `--resume-sync`.
+
+Do NOT put in `CLIFlags`:
+- `--help` / `--version` — pass through to Node automatically (Node has full context)
+- Commands that should start the daemon when none is running (e.g. `--apply-update`) — let Node's `ensureDaemonRunning()` handle them
 
 ## Usage
 
@@ -36,12 +39,12 @@ func main() {
     exe, _ := os.Executable()
     exeDir := filepath.Dir(exe)
 
-    // --config <dir> is read automatically; falls back to ~/.myapp
     configDir := launcher.ResolveConfigDir(os.Args[1:], launcher.DefaultConfigDir("myapp"))
 
     launcher.Run(launcher.Config{
         ConfigDir:  configDir,
         NodeScript: filepath.Join(exeDir, "myapp.cjs"),
+        AppName:    "myapp",   // used in error messages: "myapp daemon is not running"
         CLIFlags: []string{
             "--quit", "--restart", "--sync-now",
         },
@@ -49,29 +52,60 @@ func main() {
 }
 ```
 
-## Task Manager result
+## Build via `build.sh` (recommended)
 
-```
-myapp.exe   (Go wrapper, ~0% CPU)
-node.exe    (child - the actual daemon)
+For consumers that ship binaries, use the provided `build.sh` + `launcher.config.json`:
+
+```json
+{
+  "appName": "myapp",
+  "displayName": "My App",
+  "nodeScript": "myapp.cjs",
+  "defaultConfigDir": "myapp",
+  "cliFlags": ["--quit", "--restart", "--sync-now"]
+}
 ```
 
-Killing `myapp.exe` kills `node.exe` automatically (Job Object).
-Killing `node.exe` causes `myapp.exe` to exit naturally (`cmd.Wait()` returns).
+```bash
+bash go-launcher/build.sh launcher.config.json dist/
+# Outputs: dist/myapp_windows_release.exe, dist/myapp_darwin_arm64_release, dist/myapp_darwin_amd64_release
+```
+
+`displayName` populates the Windows PE version info (FileDescription / ProductName in Task Manager Properties). Falls back to `appName` when absent.
+
+## Windows PE metadata (`versioninfo.json`)
+
+`build.sh` substitutes `appName` and `displayName` from `launcher.config.json` into `versioninfo.json` before running `goversioninfo`. Install it once: `go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest`. Build silently skips resource embedding when `goversioninfo` is absent.
 
 ## Logging
 
-Writes to `<configDir>/logs/YYYY-MM-DD-launcher.log`.
+Writes to `<configDir>/logs/YYYY-MM-DD-launcher.log` AND always to stderr.
 Format: `[15:28:46] [ INFO] [launcher] message`
-Node.js's 30-day log rotation covers these files too.
 
-## Cross-compilation
+Never add a parallel `fmt.Fprintln(os.Stderr, …)` alongside a `logInfo`/`logWarn`/`logError` call — `logWrite` already writes to stderr unconditionally.
+
+## Updating consumers after a SDK release
+
+The SDK publishes to the GitLab npm registry. After pushing to `main` and waiting for CI:
 
 ```bash
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/myapp_windows.exe
-GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/myapp_darwin_arm64
-GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/myapp_darwin_amd64
+# 1. Check the latest published version
+npm view @wadeck/singleton-daemon-kit version \
+  --registry https://gitlab.com/api/v4/projects/84445653/packages/npm/
+
+# 2. Install in each consumer
+npm install --prefix <consumer-dir> @wadeck/singleton-daemon-kit@<version>
 ```
 
-All three targets compile from a single `ubuntu-latest` CI runner with `CGO_ENABLED=0`.
-No macOS SDK headers required.
+Known consumers: `wdrive/driver`, `agent-fleet/packages/flow-cli`.
+
+---
+
+## Task Manager result
+
+```
+myapp.exe   (Go wrapper)
+node.exe    (child — actual daemon)
+```
+
+Killing `myapp.exe` kills `node.exe` (Job Object). Killing `node.exe` causes `myapp.exe` to exit naturally.
