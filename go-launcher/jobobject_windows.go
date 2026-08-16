@@ -21,7 +21,13 @@ func assignJobObject(cmd *exec.Cmd) error {
 	// terminate the child immediately.
 
 	info := windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION{}
-	info.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+	// KILL_ON_JOB_CLOSE: kill node when the launcher exits (handle closes).
+	// SILENT_BREAKAWAY_OK: processes spawned BY node (updater helper, tray, new
+	// launcher after update) automatically leave the Job Object. Without this,
+	// they would be killed along with node when the Job Object closes — causing
+	// the update-spawned wdrive.exe to die before it can write a single log line.
+	info.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE |
+		0x00000100 // JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK
 	if _, err := windows.SetInformationJobObject(
 		job,
 		windows.JobObjectExtendedLimitInformation,
