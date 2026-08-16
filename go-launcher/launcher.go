@@ -71,6 +71,12 @@ func Run(cfg Config) {
 		cfg.DefaultPort = 47823
 	}
 
+	// Write an unconditional "launcher started" trace to the fallback log at the
+	// very first line of Run(). If this line is absent after a failed headless
+	// launch, the binary itself is not executing (OS block, missing dependency,
+	// etc.). If present but no configDir log follows, the issue is in runDaemon.
+	writeFallbackLog(fmt.Sprintf("Run() entered args=%v configDir=%q\n", os.Args, cfg.ConfigDir))
+
 	args := os.Args[1:]
 
 	// Suppress launcher INFO/WARN stderr output for short-lived pass-through commands

@@ -333,3 +333,92 @@ func TestRunDaemon_nilStdioWhenNoConsole(t *testing.T) {
 	}
 	_ = cfg
 }
+
+// --- logger: headless / fallback ---
+
+func TestOpenLogFile_succeedsWithValidDir(t *testing.T) {
+	dir := t.TempDir()
+	logMu.Lock()
+	if logFile != nil { logFile.Close() }
+	logFile = nil
+	logDay = ""
+	logMu.Unlock()
+
+	if err := openLogFile(dir); err != nil {
+		t.Fatalf("openLogFile with valid dir failed: %v", err)
+	}
+	logMu.Lock()
+	ok := logFile != nil
+	if logFile != nil { logFile.Close() }
+	logFile = nil
+	logDay = ""
+	logMu.Unlock()
+	if !ok {
+		t.Fatal("logFile should not be nil after successful openLogFile")
+	}
+}
+
+func TestLogWrite_writesToFileEvenWhenStderrIsDevNull(t *testing.T) {
+	devNull, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Skipf("cannot open devnull: %v", err)
+	}
+	origStderr := os.Stderr
+	os.Stderr = devNull
+	defer func() {
+		os.Stderr = origStderr
+		devNull.Close()
+	}()
+
+	dir := t.TempDir()
+	logMu.Lock()
+	if logFile != nil { logFile.Close() }
+	logFile = nil
+	logDay = ""
+	logMu.Unlock()
+
+	logInfo(dir, "test", "headless log test")
+
+	// Close logFile before TempDir cleanup to avoid "file in use" error on Windows
+	logMu.Lock()
+	if logFile != nil { logFile.Close() }
+	logFile = nil
+	logDay = ""
+	logMu.Unlock()
+
+	pattern := filepath.Join(dir, "logs", "*.log")
+	matches, _ := filepath.Glob(pattern)
+	if len(matches) == 0 {
+		t.Fatal("expected log file to be created, got none — logWrite silently dropped the entry when stderr=devnull")
+	}
+	content, _ := os.ReadFile(matches[0])
+	if !strings.Contains(string(content), "headless log test") {
+		t.Fatalf("expected log message in file, got: %q", string(content))
+	}
+}
+
+func TestLogWrite_fallsBackToTempWhenConfigDirEmpty(t *testing.T) {
+	// Remove any existing fallback log so we can detect a fresh write
+	fallback := filepath.Join(os.TempDir(), "wdrive-launcher-fallback.log")
+	_ = os.Remove(fallback)
+
+	logWrite("", " INFO", "test", "hello from empty configDir")
+
+	// After fix: fallback file must exist with the message
+	content, err := os.ReadFile(fallback)
+	if err != nil {
+		t.Fatalf("fallback log not created: %v — logWrite with empty configDir must write to temp fallback", err)
+	}
+	if !strings.Contains(string(content), "hello from empty configDir") {
+		t.Fatalf("expected message in fallback log, got: %q", string(content))
+	}
+}
+
+func TestHasConsole_doesNotPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("hasConsole() panicked: %v", r)
+		}
+	}()
+	_ = hasConsole()
+}

@@ -49,6 +49,16 @@ func openLogFile(configDir string) error {
 // is active and the level is INFO or WARN).
 // NEVER add a separate fmt.Fprintf(os.Stderr, ...) alongside a logInfo/logWarn/logError
 // call — that produces duplicate output. Use the log functions exclusively.
+// writeFallbackLog writes to a temp-dir fallback file when normal logging fails.
+// Used when configDir is empty or openLogFile returns an error.
+func writeFallbackLog(line string) {
+	name := filepath.Join(os.TempDir(), "wdrive-launcher-fallback.log")
+	if f, err := os.OpenFile(name, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+		_, _ = f.WriteString(line)
+		_ = f.Close()
+	}
+}
+
 func logWrite(configDir, level, category, msg string) {
 	logMu.Lock()
 	defer logMu.Unlock()
@@ -57,7 +67,13 @@ func logWrite(configDir, level, category, msg string) {
 	if configDir != "" {
 		if err := openLogFile(configDir); err == nil && logFile != nil {
 			_, _ = logFile.WriteString(line)
+		} else if err != nil {
+			// Never silently drop log entries — write to fallback so failures are diagnosable.
+			writeFallbackLog(fmt.Sprintf("openLogFile failed (configDir=%q): %v\n%s", configDir, err, line))
 		}
+	} else {
+		// No configDir: write to fallback so headless launches without a config are diagnosable.
+		writeFallbackLog(line)
 	}
 	// In silent mode, suppress INFO and WARN from stderr so short-lived commands
 	// (--help, --version, --pid) are not buried in launcher lifecycle noise.
