@@ -296,43 +296,57 @@ func TestWriteLauncherPIDFile(t *testing.T) {
 
 // --- hasConsole + stdio assignment ---
 
-func TestRunDaemon_nilStdioWhenNoConsole(t *testing.T) {
-	// hasConsole() returns false in test environment (no console attached to
-	// the test process stdout handle). Verify that cmd.Stdout/Stderr are nil
-	// in that case so node gets NUL handles instead of invalid console handles.
-	// This prevents node from crashing at libuv startup when the launcher is
-	// spawned headlessly by the updater helper after an auto-update.
-	if hasConsole() {
-		t.Skip("test process has a console — stdio nil path not exercised")
-	}
+// --- openNulStdio ---
+// These tests guard against regressions where someone changes openNulStdio to
+// return nil. nil stdio in runDaemon leaves STARTF_USESTDHANDLES unset, causing
+// node to inherit the launcher's invalid DETACHED_PROCESS handles → libuv crash
+// before any JS runs → no restart after auto-update.
 
-	dir := t.TempDir()
-	// Write a minimal config.port so dispatch is not triggered
-	// (no CLIFlags match in an empty slice)
-	cfg := Config{
-		ConfigDir:  dir,
-		NodeScript: "nonexistent.cjs",
-		CLIFlags:   []string{},
+func TestOpenNulStdio_returnsNonNilHandles(t *testing.T) {
+	stdin, stdout, stderr := openNulStdio()
+	if stdin == nil {
+		t.Error("stdin must not be nil — nil leaves STARTF_USESTDHANDLES unset, node inherits invalid handles")
 	}
-
-	// Build the cmd the same way runDaemon does, then check stdio assignment.
-	cmd := exec.Command("cmd", "/c", "exit 0") // stands in for node.exe
-	cmd.WaitDelay = waitDelay
-	setCmdFlags(cmd)
-	if hasConsole() {
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+	if stdout == nil {
+		t.Error("stdout must not be nil — nil leaves STARTF_USESTDHANDLES unset, node inherits invalid handles")
 	}
-	// else nil — the key assertion
-	if cmd.Stdout != nil {
-		t.Errorf("expected cmd.Stdout == nil when no console, got %v", cmd.Stdout)
+	if stderr == nil {
+		t.Error("stderr must not be nil — nil leaves STARTF_USESTDHANDLES unset, node inherits invalid handles")
 	}
-	if cmd.Stderr != nil {
-		t.Errorf("expected cmd.Stderr == nil when no console, got %v", cmd.Stderr)
-	}
-	_ = cfg
 }
+
+func TestOpenNulStdio_handlesAreWritable(t *testing.T) {
+	_, stdout, _ := openNulStdio()
+	if stdout == nil {
+		t.Fatal("openNulStdio returned nil stdout")
+	}
+	defer stdout.Close()
+	_, err := fmt.Fprint(stdout, "test")
+	if err != nil {
+		t.Errorf("write to NUL stdout failed: %v", err)
+	}
+}
+
+func TestRunDaemon_headlessUsesDevNullNotNil(t *testing.T) {
+	// Regression test: when hasConsole() is false, the cmd passed to node
+	// must have non-nil Stdout/Stderr. This is verified by calling openNulStdio
+	// (the function used in runDaemon) and checking the result.
+	if hasConsole() {
+		// In console mode, openNulStdio is not called; test the console path instead.
+		// os.Stdout/os.Stderr are used directly — they are always non-nil.
+		if os.Stdout == nil {
+			t.Error("os.Stdout should not be nil in console mode")
+		}
+		return
+	}
+	stdin, stdout, stderr := openNulStdio()
+	if stdin == nil || stdout == nil || stderr == nil {
+		t.Errorf("openNulStdio returned nil in headless mode: stdin=%v stdout=%v stderr=%v", stdin, stdout, stderr)
+	}
+}
+
+// --- unused exec import guard ---
+var _ = exec.Command
 
 // --- logger: headless / fallback ---
 

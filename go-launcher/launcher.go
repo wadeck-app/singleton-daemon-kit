@@ -196,18 +196,23 @@ func runDaemon(cfg Config, args []string) {
 	cmd.WaitDelay = waitDelay
 	setCmdFlags(cmd)
 
-	// When the launcher has a console (interactive terminal), pass its stdout/stderr
-	// to node so output is visible. When the launcher has no console (spawned
-	// headlessly by the updater helper after an auto-update), os.Stdout/os.Stderr
-	// are invalid handles — passing them to node via CreateProcess causes libuv to
-	// crash at startup before any JS runs, leaving no log trace. Use nil (→ NUL)
-	// instead: all daemon logging goes to the file transport anyway.
+	// Always give node explicit stdio handles via STARTF_USESTDHANDLES so that
+	// libuv initialises correctly in all execution contexts:
+	//   - Interactive terminal: pass the launcher's real console handles through.
+	//   - Headless (spawned by the updater helper with stdio:'ignore'): open the
+	//     NUL device explicitly. cmd.Stdin/Stdout/Stderr = nil does NOT set
+	//     STARTF_USESTDHANDLES — node would inherit the launcher's handles, which
+	//     may be null/invalid DETACHED_PROCESS handles that crash libuv on startup.
 	if hasConsole() {
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+	} else {
+		stdin, stdout, stderr := openNulStdio()
+		cmd.Stdin = stdin
+		cmd.Stdout = stdout
+		cmd.Stderr = stderr
 	}
-	// else: nil → Go's exec uses NUL for the child — node starts cleanly
 
 	logInfo(cfg.ConfigDir, "launcher", fmt.Sprintf("configDir=%s", cfg.ConfigDir))
 	logInfo(cfg.ConfigDir, "launcher", fmt.Sprintf("spawning %s %s", nodePath, strings.Join(scriptArgs, " ")))

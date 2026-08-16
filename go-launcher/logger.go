@@ -17,6 +17,19 @@ var (
 
 // setSilentMode suppresses INFO/WARN launcher logs from stderr when enabled.
 // ERROR logs are always written to stderr regardless. File logging is unaffected.
+// openNulStdio returns three *os.File pointing to the NUL device (Windows) or
+// /dev/null (unix). Used when spawning node headlessly so that STARTF_USESTDHANDLES
+// is set in CreateProcess — passing nil leaves it unset, causing node to inherit
+// the launcher's handles which may be null/invalid when spawned by the updater
+// helper with stdio:'ignore', crashing libuv before any JS runs.
+func openNulStdio() (stdin, stdout, stderr *os.File) {
+	nul, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
+	if err != nil {
+		return nil, nil, nil
+	}
+	return nul, nul, nul
+}
+
 func setSilentMode(v bool) {
 	logMu.Lock()
 	silentMode = v
