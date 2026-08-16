@@ -187,15 +187,21 @@ func runDaemon(cfg Config, args []string) {
 
 	scriptArgs := append([]string{cfg.NodeScript}, args...)
 	cmd := exec.Command(nodePath, scriptArgs...)
-	// Pass os.Stdout/Stderr as *os.File — Go hands the raw handles to CreateProcess,
-	// no internal I/O goroutines are created. cmd.Wait() returns as soon as node exits.
-	// WaitDelay is a safety net: if grandchildren (tray) still hold copies of the handle,
-	// cmd.Wait() force-closes after 5s rather than blocking indefinitely.
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 	cmd.WaitDelay = waitDelay
 	setCmdFlags(cmd)
+
+	// When the launcher has a console (interactive terminal), pass its stdout/stderr
+	// to node so output is visible. When the launcher has no console (spawned
+	// headlessly by the updater helper after an auto-update), os.Stdout/os.Stderr
+	// are invalid handles — passing them to node via CreateProcess causes libuv to
+	// crash at startup before any JS runs, leaving no log trace. Use nil (→ NUL)
+	// instead: all daemon logging goes to the file transport anyway.
+	if hasConsole() {
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
+	// else: nil → Go's exec uses NUL for the child — node starts cleanly
 
 	logInfo(cfg.ConfigDir, "launcher", fmt.Sprintf("configDir=%s", cfg.ConfigDir))
 	logInfo(cfg.ConfigDir, "launcher", fmt.Sprintf("spawning %s %s", nodePath, strings.Join(scriptArgs, " ")))

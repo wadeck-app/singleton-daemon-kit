@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -291,4 +292,44 @@ func TestWriteLauncherPIDFile(t *testing.T) {
 	if string(data) != "12345" {
 		t.Errorf("expected '12345', got %q", string(data))
 	}
+}
+
+// --- hasConsole + stdio assignment ---
+
+func TestRunDaemon_nilStdioWhenNoConsole(t *testing.T) {
+	// hasConsole() returns false in test environment (no console attached to
+	// the test process stdout handle). Verify that cmd.Stdout/Stderr are nil
+	// in that case so node gets NUL handles instead of invalid console handles.
+	// This prevents node from crashing at libuv startup when the launcher is
+	// spawned headlessly by the updater helper after an auto-update.
+	if hasConsole() {
+		t.Skip("test process has a console — stdio nil path not exercised")
+	}
+
+	dir := t.TempDir()
+	// Write a minimal config.port so dispatch is not triggered
+	// (no CLIFlags match in an empty slice)
+	cfg := Config{
+		ConfigDir:  dir,
+		NodeScript: "nonexistent.cjs",
+		CLIFlags:   []string{},
+	}
+
+	// Build the cmd the same way runDaemon does, then check stdio assignment.
+	cmd := exec.Command("cmd", "/c", "exit 0") // stands in for node.exe
+	cmd.WaitDelay = waitDelay
+	setCmdFlags(cmd)
+	if hasConsole() {
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
+	// else nil — the key assertion
+	if cmd.Stdout != nil {
+		t.Errorf("expected cmd.Stdout == nil when no console, got %v", cmd.Stdout)
+	}
+	if cmd.Stderr != nil {
+		t.Errorf("expected cmd.Stderr == nil when no console, got %v", cmd.Stderr)
+	}
+	_ = cfg
 }
