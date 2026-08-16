@@ -25,7 +25,7 @@ func assignJobObject(cmd *exec.Cmd) error {
 	// SILENT_BREAKAWAY_OK: processes spawned BY node (updater helper, tray, new
 	// launcher after update) automatically leave the Job Object. Without this,
 	// they would be killed along with node when the Job Object closes — causing
-	// the update-spawned wdrive.exe to die before it can write a single log line.
+	// the update-spawned launcher to die before it can write a single log line.
 	info.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE |
 		0x00001000 // JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK (not in golang.org/x/sys/windows)
 	if _, err := windows.SetInformationJobObject(

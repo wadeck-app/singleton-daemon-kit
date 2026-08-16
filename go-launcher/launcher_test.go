@@ -12,34 +12,15 @@ import (
 	"testing"
 )
 
-// --- ResolveConfigDir ---
+// --- DefaultConfigDir ---
 
-func TestResolveConfigDir_flag(t *testing.T) {
-	result := ResolveConfigDir([]string{"--config", "/custom/dir", "--quit"}, "/default")
-	if result != "/custom/dir" {
-		t.Errorf("expected /custom/dir, got %s", result)
+func TestDefaultConfigDir_returnsHomeSubdir(t *testing.T) {
+	result := DefaultConfigDir("myapp")
+	if result == "" {
+		t.Error("expected non-empty path")
 	}
-}
-
-func TestResolveConfigDir_default(t *testing.T) {
-	result := ResolveConfigDir([]string{"--quit"}, "/default")
-	if result != "/default" {
-		t.Errorf("expected /default, got %s", result)
-	}
-}
-
-func TestResolveConfigDir_empty(t *testing.T) {
-	result := ResolveConfigDir([]string{}, "/default")
-	if result != "/default" {
-		t.Errorf("expected /default, got %s", result)
-	}
-}
-
-func TestResolveConfigDir_configFlagAtEnd(t *testing.T) {
-	// --config at end with no value → fall back to default (no panic)
-	result := ResolveConfigDir([]string{"--config"}, "/default")
-	if result != "/default" {
-		t.Errorf("expected /default, got %s", result)
+	if !strings.HasSuffix(result, ".myapp") && !strings.Contains(result, ".myapp") {
+		t.Errorf("expected path to contain .myapp, got %s", result)
 	}
 }
 
@@ -52,7 +33,7 @@ func TestIsCLIDispatch_match(t *testing.T) {
 }
 
 func TestIsCLIDispatch_noMatch(t *testing.T) {
-	if isCLIDispatch([]string{"~/.wdrive"}, []string{"--quit", "--sync-now"}) {
+	if isCLIDispatch([]string{"~/.myapp"}, []string{"--quit", "--sync-now"}) {
 		t.Error("expected false for config dir arg")
 	}
 }
@@ -176,11 +157,11 @@ func TestHTTPDispatch_unauthorized(t *testing.T) {
 // --- formatDaemonNotRunning ---
 
 func TestFormatDaemonNotRunning(t *testing.T) {
-	msg := formatDaemonNotRunning("myapp", "/home/user/.wdrive")
+	msg := formatDaemonNotRunning("myapp", "/home/user/.myapp")
 	if !strings.Contains(msg, "myapp daemon is not running") {
 		t.Errorf("expected app name in %q", msg)
 	}
-	if !strings.Contains(msg, filepath.Join("/home/user/.wdrive", "logs")) {
+	if !strings.Contains(msg, filepath.Join("/home/user/.myapp", "logs")) {
 		t.Errorf("expected log dir in %q", msg)
 	}
 	if !strings.Contains(msg, "Start it with: myapp") {
@@ -191,11 +172,11 @@ func TestFormatDaemonNotRunning(t *testing.T) {
 // --- formatDaemonNotResponding ---
 
 func TestFormatDaemonNotResponding(t *testing.T) {
-	msg := formatDaemonNotResponding("myapp", 47823, "/home/user/.wdrive")
+	msg := formatDaemonNotResponding("myapp", 47823, "/home/user/.myapp")
 	if !strings.Contains(msg, "47823") {
 		t.Errorf("expected port in %q", msg)
 	}
-	if !strings.Contains(msg, filepath.Join("/home/user/.wdrive", "logs")) {
+	if !strings.Contains(msg, filepath.Join("/home/user/.myapp", "logs")) {
 		t.Errorf("expected log dir in %q", msg)
 	}
 	if !strings.Contains(msg, "To restart: myapp") {
@@ -206,14 +187,14 @@ func TestFormatDaemonNotResponding(t *testing.T) {
 // --- formatHTTPError ---
 
 func TestFormatHTTPError_401(t *testing.T) {
-	msg := formatHTTPError("myapp", 401, "quit", "/home/.wdrive")
+	msg := formatHTTPError("myapp", 401, "quit", "/home/.myapp")
 	if !strings.Contains(msg, "Authentication error") {
 		t.Errorf("expected auth error in %q", msg)
 	}
 }
 
 func TestFormatHTTPError_404(t *testing.T) {
-	msg := formatHTTPError("myapp", 404, "unknown-cmd", "/home/.wdrive")
+	msg := formatHTTPError("myapp", 404, "unknown-cmd", "/home/.myapp")
 	if !strings.Contains(msg, "unknown-cmd") {
 		t.Errorf("expected command name in %q", msg)
 	}
@@ -223,21 +204,21 @@ func TestFormatHTTPError_404(t *testing.T) {
 }
 
 func TestFormatHTTPError_500(t *testing.T) {
-	msg := formatHTTPError("myapp", 500, "quit", "/home/.wdrive")
+	msg := formatHTTPError("myapp", 500, "quit", "/home/.myapp")
 	if !strings.Contains(msg, "internal error") {
 		t.Errorf("expected internal error in %q", msg)
 	}
-	if !strings.Contains(msg, filepath.Join("/home/.wdrive", "logs")) {
+	if !strings.Contains(msg, filepath.Join("/home/.myapp", "logs")) {
 		t.Errorf("expected log dir in %q", msg)
 	}
 }
 
 func TestFormatHTTPError_other(t *testing.T) {
-	msg := formatHTTPError("myapp", 503, "quit", "/home/.wdrive")
+	msg := formatHTTPError("myapp", 503, "quit", "/home/.myapp")
 	if !strings.Contains(msg, "503") {
 		t.Errorf("expected status code in %q", msg)
 	}
-	if !strings.Contains(msg, filepath.Join("/home/.wdrive", "logs")) {
+	if !strings.Contains(msg, filepath.Join("/home/.myapp", "logs")) {
 		t.Errorf("expected log dir in %q", msg)
 	}
 }
@@ -246,8 +227,8 @@ func TestFormatHTTPError_other(t *testing.T) {
 
 func TestFormatNodeStartError(t *testing.T) {
 	err := fmt.Errorf("exec: not found")
-	msg := formatNodeStartError("/path/to/wdrive.cjs", err)
-	if !strings.Contains(msg, "wdrive.cjs") {
+	msg := formatNodeStartError("/path/to/app.cjs", err)
+	if !strings.Contains(msg, "app.cjs") {
 		t.Errorf("expected script name in %q", msg)
 	}
 	if !strings.Contains(msg, "exec: not found") {
@@ -412,8 +393,10 @@ func TestLogWrite_writesToFileEvenWhenStderrIsDevNull(t *testing.T) {
 }
 
 func TestLogWrite_fallsBackToTempWhenConfigDirEmpty(t *testing.T) {
+	// Compute fallback path using same logic as writeFallbackLog
+	exe := filepath.Base(os.Args[0])
+	fallback := filepath.Join(os.TempDir(), exe+"-launcher-fallback.log")
 	// Remove any existing fallback log so we can detect a fresh write
-	fallback := filepath.Join(os.TempDir(), "wdrive-launcher-fallback.log")
 	_ = os.Remove(fallback)
 
 	logWrite("", " INFO", "test", "hello from empty configDir")

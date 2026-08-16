@@ -73,7 +73,7 @@ auth-type=legacy
 | Repo | Secret | Token type |
 |------|--------|------------|
 | `Wadeck/singleton-daemon-kit` | `GITLAB_NPM_WRITE_TOKEN` | write deploy token |
-| `Wadeck/wdrive` | `GITLAB_NPM_READ_TOKEN` | read deploy token |
+| `<owner>/<repo>` | `GITLAB_NPM_READ_TOKEN` | read deploy token |
 | `Wadeck/agent-fleet` | `GITLAB_NPM_READ_TOKEN` | read deploy token |
 
 Publishing happens automatically on every push to `main` via `.github/workflows/publish.yml`.

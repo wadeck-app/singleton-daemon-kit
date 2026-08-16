@@ -1,17 +1,26 @@
 #!/usr/bin/env bash
 # build.sh — Cross-compile the go-launcher consumer binary for 3 targets.
-# Usage: build.sh <config.json> <outputDir>
+# Usage: build.sh <config.json> <outputDir> [<main.go.tmpl>]
+#
+# Arguments:
+#   config.json   — consumer config (appName, nodeScript, defaultConfigDir, cliFlags, ...)
+#   outputDir     — directory to write compiled binaries
+#   main.go.tmpl  — optional: consumer-provided template (default: SDK's minimal template)
+#                   Use this when your consumer needs custom arg parsing, flag conventions,
+#                   or any logic that goes beyond the SDK's default ConfigDir resolution.
 #
 # config.json fields:
-#   appName        (string) — binary name prefix
-#   nodeScript     (string) — path to the .cjs bundle relative to the exe
-#   defaultConfigDir (string) — default config directory name (e.g. ".wdrive")
-#   cliFlags       (string[]) — flags that trigger HTTP dispatch instead of daemon spawn
+#   appName          (string)   — binary name prefix
+#   nodeScript       (string)   — path to the .cjs bundle relative to the exe
+#   defaultConfigDir (string)   — default config directory name (e.g. ".myapp")
+#   cliFlags         (string[]) — flags that trigger HTTP dispatch instead of daemon spawn
+#   silentFlags      (string[]) — flags that suppress launcher lifecycle noise on stderr
 
 set -euo pipefail
 
 CONFIG_FILE="${1:-}"
 OUTPUT_DIR="${2:-}"
+CUSTOM_TEMPLATE="${3:-}"
 
 # --- Validate arguments ---
 if [[ -z "$CONFIG_FILE" ]]; then
@@ -69,7 +78,13 @@ fi
 
 # --- Locate the template file (same directory as this script) ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TEMPLATE_FILE="$SCRIPT_DIR/main.go.tmpl"
+# Use consumer-provided template if given, otherwise SDK's minimal default
+if [[ -n "$CUSTOM_TEMPLATE" ]]; then
+  TEMPLATE_FILE="$CUSTOM_TEMPLATE"
+  echo "Using consumer template: $TEMPLATE_FILE"
+else
+  TEMPLATE_FILE="$SCRIPT_DIR/main.go.tmpl"
+fi
 
 if [[ ! -f "$TEMPLATE_FILE" ]]; then
   echo "Error: template file not found: $TEMPLATE_FILE" >&2

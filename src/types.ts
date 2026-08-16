@@ -25,8 +25,8 @@ export interface DaemonHooks {
   onTakeoverFailed?: (pid: number) => void;
 }
 
-// 'update' is used by consumers that implement auto-update (e.g. wdrive).
-// See wdrive inspiration: driver/src/updater/ (Updater class) + driver/src/index.ts
+
+
 // (applyUpdate command handler calls handle.stop('update') then re-spawns the process).
 export type ShutdownReason = 'idle' | 'signal' | 'command' | 'error' | 'update';
 

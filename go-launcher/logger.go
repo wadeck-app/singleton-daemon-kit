@@ -64,8 +64,10 @@ func openLogFile(configDir string) error {
 // call — that produces duplicate output. Use the log functions exclusively.
 // writeFallbackLog writes to a temp-dir fallback file when normal logging fails.
 // Used when configDir is empty or openLogFile returns an error.
+// The filename is derived from the executable name so it works for any consumer.
 func writeFallbackLog(line string) {
-	name := filepath.Join(os.TempDir(), "wdrive-launcher-fallback.log")
+	exe := filepath.Base(os.Args[0])
+	name := filepath.Join(os.TempDir(), exe+"-launcher-fallback.log")
 	if f, err := os.OpenFile(name, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 		_, _ = f.WriteString(line)
 		_ = f.Close()

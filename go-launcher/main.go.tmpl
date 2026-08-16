@@ -10,14 +10,18 @@ import (
 	launcher "wadeck.ch/singleton-daemon-kit/go-launcher"
 )
 
+// This is the minimal reference template provided by the SDK.
+// It does NOT parse os.Args — configDir defaults to ~/.{{.DefaultConfigDir}}.
+//
+// Consumers that need argument parsing (--config, positional paths, env vars, etc.)
+// should provide their own main.go.tmpl and pass it as the third argument to build.sh:
+//   bash build.sh launcher.config.json dist/ /path/to/custom/main.go.tmpl
 func main() {
 	exe, _ := os.Executable()
 	exeDir := filepath.Dir(exe)
 
-	configDir := launcher.ResolveConfigDir(os.Args[1:], launcher.DefaultConfigDir("{{.DefaultConfigDir}}"))
-
 	launcher.Run(launcher.Config{
-		ConfigDir:  configDir,
+		ConfigDir:  launcher.DefaultConfigDir("{{.DefaultConfigDir}}"),
 		NodeScript: filepath.Join(exeDir, "{{.NodeScript}}"),
 		AppName:    "{{.AppName}}",
 		CLIFlags: []string{
