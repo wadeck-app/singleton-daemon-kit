@@ -27,7 +27,7 @@ func assignJobObject(cmd *exec.Cmd) error {
 	// they would be killed along with node when the Job Object closes — causing
 	// the update-spawned wdrive.exe to die before it can write a single log line.
 	info.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE |
-		0x00000100 // JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK
+		0x00001000 // JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK (not in golang.org/x/sys/windows)
 	if _, err := windows.SetInformationJobObject(
 		job,
 		windows.JobObjectExtendedLimitInformation,
