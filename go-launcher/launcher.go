@@ -44,6 +44,12 @@ type Config struct {
 	// AppName is the binary name used in user-facing error messages (e.g. "wdrive").
 	// Defaults to the executable basename when empty.
 	AppName string
+
+	// SilentFlags lists flags for which the launcher suppresses its own INFO/WARN
+	// log output on stderr. Error logs are always shown. File logging is unaffected.
+	// Use for short-lived pass-through commands (--help, --version, --pid) where
+	// launcher lifecycle noise would obscure the actual command output.
+	SilentFlags []string
 }
 
 // Run is the launcher entrypoint — it never returns.
@@ -66,6 +72,17 @@ func Run(cfg Config) {
 	}
 
 	args := os.Args[1:]
+
+	// Suppress launcher INFO/WARN stderr output for short-lived pass-through commands
+	// (e.g. --help, --version, --pid) so their output is not buried in lifecycle noise.
+	for _, arg := range args {
+		for _, silent := range cfg.SilentFlags {
+			if arg == silent {
+				setSilentMode(true)
+				break
+			}
+		}
+	}
 	if isCLIDispatch(args, cfg.CLIFlags) {
 		runCLIDispatch(cfg, args)
 	} else {

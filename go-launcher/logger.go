@@ -9,10 +9,19 @@ import (
 )
 
 var (
-	logMu   sync.Mutex
-	logFile *os.File
-	logDay  string
+	logMu      sync.Mutex
+	logFile    *os.File
+	logDay     string
+	silentMode bool
 )
+
+// setSilentMode suppresses INFO/WARN launcher logs from stderr when enabled.
+// ERROR logs are always written to stderr regardless. File logging is unaffected.
+func setSilentMode(v bool) {
+	logMu.Lock()
+	silentMode = v
+	logMu.Unlock()
+}
 
 func openLogFile(configDir string) error {
 	day := time.Now().Format("2006-01-02")
@@ -36,8 +45,8 @@ func openLogFile(configDir string) error {
 	return nil
 }
 
-// logWrite writes to stderr unconditionally, and additionally to the daily log
-// file when configDir is non-empty and the file can be opened.
+// logWrite writes to the daily log file (always) and to stderr (unless silentMode
+// is active and the level is INFO or WARN).
 // NEVER add a separate fmt.Fprintf(os.Stderr, ...) alongside a logInfo/logWarn/logError
 // call — that produces duplicate output. Use the log functions exclusively.
 func logWrite(configDir, level, category, msg string) {
@@ -50,7 +59,11 @@ func logWrite(configDir, level, category, msg string) {
 			_, _ = logFile.WriteString(line)
 		}
 	}
-	_, _ = fmt.Fprint(os.Stderr, line)
+	// In silent mode, suppress INFO and WARN from stderr so short-lived commands
+	// (--help, --version, --pid) are not buried in launcher lifecycle noise.
+	if !silentMode || level == "ERROR" {
+		_, _ = fmt.Fprint(os.Stderr, line)
+	}
 }
 
 func logInfo(configDir, category, msg string) {
