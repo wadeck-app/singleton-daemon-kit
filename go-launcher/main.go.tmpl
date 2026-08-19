@@ -18,6 +18,10 @@ import (
 //   bash build.sh launcher.config.json dist/ /path/to/custom/main.go.tmpl
 func main() {
 	exe, _ := os.Executable()
+	// Resolve symlinks so exeDir points to the real binary directory, not the symlink's directory.
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
 	exeDir := filepath.Dir(exe)
 
 	launcher.Run(launcher.Config{

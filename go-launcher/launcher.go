@@ -192,6 +192,12 @@ func runDaemon(cfg Config, args []string) {
 		os.Exit(1)
 	}
 
+	// Allow the npm shim to override the bundle path when launcher and bundle
+	// are in different npm packages (exe-in-npm distribution pattern).
+	if override := os.Getenv("LAUNCHER_BUNDLE_OVERRIDE"); override != "" {
+		cfg.NodeScript = override
+	}
+
 	scriptArgs := append([]string{cfg.NodeScript}, args...)
 	cmd := exec.Command(nodePath, scriptArgs...)
 	cmd.WaitDelay = waitDelay

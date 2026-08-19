@@ -96,6 +96,12 @@ bash go-launcher/build.sh launcher.config.json dist/
 
 `build.sh` substitutes `appName` and `displayName` from `launcher.config.json` into `versioninfo.json` before running `goversioninfo`. Install it once: `go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest`. Build silently skips resource embedding when `goversioninfo` is absent.
 
+## Environment variables
+
+| Variable | Description |
+|---|---|
+| `LAUNCHER_BUNDLE_OVERRIDE` | When set, overrides `Config.NodeScript` with the given absolute path. Intended for the npm-distribution pattern where the launcher binary lives in one npm package (e.g. `@scope/app-win32-x64`) and the `.cjs` bundle lives in another (`@scope/app`). The JS shim sets this to `require.resolve('@scope/app/app.cjs')` before exec-ing the launcher. |
+
 ## Logging
 
 Writes to `<configDir>/logs/YYYY-MM-DD-launcher.log` AND always to stderr.
