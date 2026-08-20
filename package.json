@@ -1,10 +1,12 @@
 {
   "name": "@wadeck/singleton-daemon-kit",
+  "//version": "DO NOT manually edit this field. CI overwrites it via ci/scripts/compute-version.sh using format 1.YYYYMMDDHHMMSS.BUILD (e.g. 1.20260820143022.320). The value here is just a placeholder.",
   "version": "1.0.1",
   "description": "Singleton daemon pattern — port file, takeover, health HTTP, CLI dispatch",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
+    "preversion": "node -e \"if (!process.env.CI) { console.error('ERROR: version is CI-managed (format 1.YYYYMMDDHHMMSS.BUILD). Run via CI only. See CLAUDE.md.'); process.exit(1); }\"",
     "build": "tsc",
     "test": "vitest run",
     "check": "tsc --noEmit && vitest run"
