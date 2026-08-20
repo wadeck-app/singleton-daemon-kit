@@ -42,6 +42,39 @@ Use this when the launcher binary and the `.cjs` bundle are in different npm pac
 
 `--help` and `--version` are NOT in `cliFlags` — they pass through to Node.
 
+## Registry setup for consumers
+
+Two different URLs serve two different purposes — do not mix them:
+
+| URL | Where | Purpose |
+|---|---|---|
+| `https://gitlab.com/api/v4/packages/npm/` | `~/.npmrc` + project `.npmrc` | Consuming packages (`npm install`) |
+| `https://gitlab.com/api/v4/projects/84445653/packages/npm/` | `publishConfig` in `package.json` | Publishing packages (`npm publish`) |
+
+**`~/.npmrc`** (one-time local setup, never committed):
+```
+@wadeck:registry=https://gitlab.com/api/v4/packages/npm/
+//gitlab.com/api/v4/packages/npm/:_authToken=<your-token>
+```
+
+**Project `.npmrc`** (committed, no token):
+```
+@wadeck:registry=https://gitlab.com/api/v4/packages/npm/
+# Auth token is NOT stored here -- use ~/.npmrc locally or NODE_AUTH_TOKEN secret in CI.
+```
+
+**`publishConfig`** in each publishable `package.json` (project-level URL, intentional):
+```json
+"publishConfig": {
+  "@wadeck:registry": "https://gitlab.com/api/v4/projects/84445653/packages/npm/"
+}
+```
+
+**CI**: inject `NODE_AUTH_TOKEN` secret; add to `~/.npmrc` in a setup step:
+```bash
+echo "//gitlab.com/api/v4/packages/npm/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+```
+
 ## Contributing
 
 Run `npm run check` before committing (`tsc --noEmit && vitest run`).  

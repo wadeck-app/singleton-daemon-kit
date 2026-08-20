@@ -186,9 +186,15 @@ func runCLIDispatch(cfg Config, args []string) {
 // runDaemon spawns node.exe with the .cjs script and stays alive until it exits.
 // On Windows a Job Object ensures the child is killed when this process dies.
 func runDaemon(cfg Config, args []string) {
+	if ppid := os.Getppid(); ppid == 1 {
+		logInfo(cfg.ConfigDir, "launcher", "launched by launchd (login agent, ppid=1)")
+	} else {
+		logInfo(cfg.ConfigDir, "launcher", fmt.Sprintf("launched manually (ppid=%d)", ppid))
+	}
+
 	nodePath, err := exec.LookPath("node")
 	if err != nil {
-		logError(cfg.ConfigDir, "launcher", "node not found in PATH — install Node.js and ensure it is in PATH")
+		logError(cfg.ConfigDir, "launcher", "node not found in PATH - install Node.js and ensure it is in PATH")
 		os.Exit(1)
 	}
 
