@@ -44,36 +44,26 @@ Use this when the launcher binary and the `.cjs` bundle are in different npm pac
 
 ## Registry setup for consumers
 
-Two different URLs serve two different purposes — do not mix them:
-
-| URL | Where | Purpose |
-|---|---|---|
-| `https://gitlab.com/api/v4/packages/npm/` | `~/.npmrc` + project `.npmrc` | Consuming packages (`npm install`) |
-| `https://gitlab.com/api/v4/projects/84445653/packages/npm/` | `publishConfig` in `package.json` | Publishing packages (`npm publish`) |
-
-**`~/.npmrc`** (one-time local setup, never committed):
+**One-time local setup** (`~/.npmrc`, never committed):
 ```
 @wadeck:registry=https://gitlab.com/api/v4/packages/npm/
-//gitlab.com/api/v4/packages/npm/:_authToken=<your-token>
+//gitlab.com/api/v4/packages/npm/:_authToken=<your GitLab personal access token>
 ```
 
-**Project `.npmrc`** (committed, no token):
-```
-@wadeck:registry=https://gitlab.com/api/v4/packages/npm/
-# Auth token is NOT stored here -- use ~/.npmrc locally or NODE_AUTH_TOKEN secret in CI.
-```
+**No project `.npmrc` needed.** Scope config lives in `~/.npmrc` locally and in CI via the setup step below.
 
-**`publishConfig`** in each publishable `package.json` (project-level URL, intentional):
+**`publishConfig`** in publishable `package.json` uses the project-level URL — intentional, required by GitLab to publish to a specific project:
 ```json
-"publishConfig": {
-  "@wadeck:registry": "https://gitlab.com/api/v4/projects/84445653/packages/npm/"
-}
+"publishConfig": { "@wadeck:registry": "https://gitlab.com/api/v4/projects/84445653/packages/npm/" }
 ```
 
-**CI**: inject `NODE_AUTH_TOKEN` secret; add to `~/.npmrc` in a setup step:
+**CI setup step** — requires TWO auth lines. GitLab always returns project-level tarball URLs in package metadata, so `npm ci` needs auth for both the group-level scope URL and the project-level download URL:
 ```bash
-echo "//gitlab.com/api/v4/packages/npm/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+echo "@wadeck:registry=https://gitlab.com/api/v4/packages/npm/" >> ~/.npmrc
+echo "//gitlab.com/api/v4/packages/npm/:_authToken=${TOKEN}" >> ~/.npmrc
+echo "//gitlab.com/api/v4/projects/84445653/packages/npm/:_authToken=${TOKEN}" >> ~/.npmrc
 ```
+Omitting the third line causes `404 Project not found` for `@wadeck` tarballs in CI.
 
 ## Contributing
 
