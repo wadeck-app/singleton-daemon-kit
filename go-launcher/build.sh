@@ -188,10 +188,16 @@ build_target() {
   local goarch="$2"
   local output="$3"
 
+  # -H windowsgui suppresses the console window on Windows (SUBSYSTEM:WINDOWS instead of SUBSYSTEM:CONSOLE)
+  local ldflags="-s -w"
+  if [ "$goos" = "windows" ]; then
+    ldflags="-s -w -H windowsgui"
+  fi
+
   echo "  Building $goos/$goarch -> $output"
   if ! (cd "$TMPDIR" && GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build \
     -trimpath \
-    -ldflags "-s -w" \
+    -ldflags "$ldflags" \
     -o "$output" .); then
     echo "Error: build failed for $goos/$goarch" >&2
     exit 1
