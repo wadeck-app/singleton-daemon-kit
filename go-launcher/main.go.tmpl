@@ -11,10 +11,11 @@ import (
 )
 
 // This is the minimal reference template provided by the SDK.
-// It does NOT parse os.Args — configDir defaults to ~/.{{.DefaultConfigDir}}.
+// It resolves the config dir via the XDG standard, honouring --config <dir>,
+// $XDG_CONFIG_HOME, and falling back to $HOME/.config/{{.DefaultConfigDir}}.
 //
-// Consumers that need argument parsing (--config, positional paths, env vars, etc.)
-// should provide their own main.go.tmpl and pass it as the third argument to build.sh:
+// Consumers that need additional argument parsing should provide their own
+// main.go.tmpl and pass it as the third argument to build.sh:
 //   bash build.sh launcher.config.json dist/ /path/to/custom/main.go.tmpl
 func main() {
 	exe, _ := os.Executable()
@@ -24,8 +25,13 @@ func main() {
 	}
 	exeDir := filepath.Dir(exe)
 
+	// ResolveConfigDir handles --config <dir>, $XDG_CONFIG_HOME, and legacy migration.
+	// It returns the filtered args with "--config <dir>" removed so node does not see it.
+	configDir, args := launcher.ResolveConfigDir("{{.DefaultConfigDir}}", os.Args[1:])
+
 	launcher.Run(launcher.Config{
-		ConfigDir:  launcher.DefaultConfigDir("{{.DefaultConfigDir}}"),
+		ConfigDir:  configDir,
+		Args:       args,
 		NodeScript: filepath.Join(exeDir, "{{.NodeScript}}"),
 		AppName:    "{{.AppName}}",
 		CLIFlags: []string{

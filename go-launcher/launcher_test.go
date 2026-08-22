@@ -14,13 +14,138 @@ import (
 
 // --- DefaultConfigDir ---
 
-func TestDefaultConfigDir_returnsHomeSubdir(t *testing.T) {
+func TestDefaultConfigDir_usesXDGStandard(t *testing.T) {
+	// No dot prefix; uses ~/.config/<appName> by default.
+	t.Setenv("XDG_CONFIG_HOME", "")
 	result := DefaultConfigDir("myapp")
 	if result == "" {
 		t.Error("expected non-empty path")
 	}
-	if !strings.HasSuffix(result, ".myapp") && !strings.Contains(result, ".myapp") {
-		t.Errorf("expected path to contain .myapp, got %s", result)
+	// Must NOT have a dot prefix on the app name.
+	if strings.Contains(result, "/.myapp") || strings.HasSuffix(result, "\\.myapp") {
+		t.Errorf("expected XDG path without dot prefix, got %s", result)
+	}
+	if !strings.Contains(result, filepath.Join(".config", "myapp")) {
+		t.Errorf("expected path to contain .config/myapp, got %s", result)
+	}
+}
+
+func TestDefaultConfigDir_respectsXDGConfigHome(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/custom/xdg")
+	result := DefaultConfigDir("myapp")
+	expected := filepath.Join("/custom/xdg", "myapp")
+	if result != expected {
+		t.Errorf("expected %s, got %s", expected, result)
+	}
+}
+
+// --- extractConfigArg ---
+
+func TestExtractConfigArg_present(t *testing.T) {
+	dir, remaining := extractConfigArg([]string{"--config", "/my/dir", "--quit"})
+	if dir != "/my/dir" {
+		t.Errorf("expected /my/dir, got %s", dir)
+	}
+	if len(remaining) != 1 || remaining[0] != "--quit" {
+		t.Errorf("expected [--quit], got %v", remaining)
+	}
+}
+
+func TestExtractConfigArg_absent(t *testing.T) {
+	dir, remaining := extractConfigArg([]string{"--quit", "--sync-now"})
+	if dir != "" {
+		t.Errorf("expected empty dir, got %s", dir)
+	}
+	if len(remaining) != 2 {
+		t.Errorf("expected original args unchanged, got %v", remaining)
+	}
+}
+
+func TestExtractConfigArg_configAtEnd_noValue(t *testing.T) {
+	// --config with no following value: treated as absent (no dir extracted).
+	dir, remaining := extractConfigArg([]string{"--config"})
+	if dir != "" {
+		t.Errorf("expected empty dir when --config has no value, got %s", dir)
+	}
+	if len(remaining) != 1 || remaining[0] != "--config" {
+		t.Errorf("expected [--config] in remaining, got %v", remaining)
+	}
+}
+
+// --- ResolveConfigDir ---
+
+func TestResolveConfigDir_configFlagTakesPriority(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/should/be/ignored")
+	dir, remaining := ResolveConfigDir("myapp", []string{"--config", "/explicit/dir", "--quit"})
+	if dir != "/explicit/dir" {
+		t.Errorf("expected /explicit/dir, got %s", dir)
+	}
+	if len(remaining) != 1 || remaining[0] != "--quit" {
+		t.Errorf("expected [--quit] in remaining, got %v", remaining)
+	}
+}
+
+func TestResolveConfigDir_xdgFallback(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/xdg/base")
+	dir, _ := ResolveConfigDir("myapp", []string{})
+	if dir != filepath.Join("/xdg/base", "myapp") {
+		t.Errorf("expected /xdg/base/myapp, got %s", dir)
+	}
+}
+
+func TestResolveConfigDir_homeFallback(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	dir, _ := ResolveConfigDir("myapp", []string{})
+	if !strings.Contains(dir, filepath.Join(".config", "myapp")) {
+		t.Errorf("expected ~/.config/myapp, got %s", dir)
+	}
+}
+
+// --- migrateConfigDir ---
+
+func TestMigrateConfigDir_renamesLegacyPath(t *testing.T) {
+	base := t.TempDir()
+	oldPath := filepath.Join(base, ".myapp")
+	newPath := filepath.Join(base, ".config", "myapp")
+
+	// Create a file in the legacy dir to verify rename.
+	if err := os.MkdirAll(oldPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(oldPath, "config.port"), []byte("{}"), 0o600)
+
+	migrateConfigDir(oldPath, newPath)
+
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Error("legacy path should no longer exist after migration")
+	}
+	if _, err := os.Stat(filepath.Join(newPath, "config.port")); err != nil {
+		t.Errorf("new path should contain migrated files: %v", err)
+	}
+}
+
+func TestMigrateConfigDir_skipsWhenOldAbsent(t *testing.T) {
+	base := t.TempDir()
+	// old path does not exist — should be a no-op
+	migrateConfigDir(filepath.Join(base, "absent"), filepath.Join(base, "new"))
+	if _, err := os.Stat(filepath.Join(base, "new")); !os.IsNotExist(err) {
+		t.Error("new path should not be created when old path is absent")
+	}
+}
+
+func TestMigrateConfigDir_skipsWhenNewAlreadyExists(t *testing.T) {
+	base := t.TempDir()
+	oldPath := filepath.Join(base, "old")
+	newPath := filepath.Join(base, "new")
+	os.MkdirAll(oldPath, 0o755)
+	os.MkdirAll(newPath, 0o755)
+	os.WriteFile(filepath.Join(newPath, "sentinel"), []byte("existing"), 0o600)
+
+	migrateConfigDir(oldPath, newPath)
+
+	// old path must still exist (nothing renamed)
+	if _, err := os.Stat(oldPath); err != nil {
+		t.Error("old path should still exist when new path already exists")
 	}
 }
 

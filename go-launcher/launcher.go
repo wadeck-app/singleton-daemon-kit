@@ -39,7 +39,7 @@ const waitDelay = 5 * time.Second
 // Config holds all project-specific settings for the launcher.
 type Config struct {
 	// ConfigDir is the path to the daemon's config directory
-	// (where config.port and health_token live, e.g. ~/.myapp).
+	// (where config.port and health_token live, e.g. ~/.config/myapp).
 	ConfigDir string
 
 	// NodeScript is the absolute path to the .cjs bundle to spawn in daemon mode.
@@ -61,6 +61,11 @@ type Config struct {
 	// Use for short-lived pass-through commands (--help, --version, --pid) where
 	// launcher lifecycle noise would obscure the actual command output.
 	SilentFlags []string
+
+	// Args overrides os.Args[1:] when set. Use this to pass pre-filtered args
+	// (e.g. after stripping --config <dir> via ResolveConfigDir). When nil,
+	// os.Args[1:] is used.
+	Args []string
 }
 
 // Run is the launcher entrypoint — it never returns.
@@ -82,7 +87,10 @@ func Run(cfg Config) {
 		cfg.DefaultPort = 47823
 	}
 
-	args := os.Args[1:]
+	args := cfg.Args
+	if args == nil {
+		args = os.Args[1:]
+	}
 
 	// Suppress launcher INFO/WARN stderr output for short-lived pass-through commands
 	// (e.g. --help, --version, --pid) so their output is not buried in lifecycle noise.
@@ -297,11 +305,92 @@ func runDaemon(cfg Config, args []string) {
 	os.Exit(exitCode)
 }
 
-// DefaultConfigDir returns the platform-appropriate default config directory (~/.appName).
+// DefaultConfigDir returns the XDG-standard config directory for the given app name.
+// Resolution order:
+//  1. $XDG_CONFIG_HOME/<appName> if $XDG_CONFIG_HOME is set
+//  2. $HOME/.config/<appName> otherwise
+//
+// No dot prefix is added to appName — pass a bare app name (e.g. "flow", "wdrive").
+// On Windows, APPDATA is intentionally ignored to keep behaviour consistent across platforms.
 func DefaultConfigDir(appName string) string {
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, appName)
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "." + string(filepath.Separator) + "." + appName
+		return filepath.Join(".", ".config", appName)
 	}
-	return filepath.Join(home, "."+appName)
+	return filepath.Join(home, ".config", appName)
+}
+
+// ResolveConfigDir resolves the config directory for appName from CLI args, environment,
+// and filesystem, and performs a one-time legacy path migration when necessary.
+//
+// Resolution order (highest to lowest priority):
+//  1. --config <dir> in args — consumed from the returned remainingArgs slice
+//  2. $XDG_CONFIG_HOME/<appName> if $XDG_CONFIG_HOME is set
+//  3. $HOME/.config/<appName> otherwise
+//
+// Migration: if the legacy path ~/.<appName> exists and the resolved new path does not,
+// it is automatically renamed and a message is printed to stderr.
+// Migration is skipped when --config is used (custom dirs need no migration).
+func ResolveConfigDir(appName string, args []string) (configDir string, remainingArgs []string) {
+	// Priority 1: --config <dir> from CLI args
+	configDir, remainingArgs = extractConfigArg(args)
+	if configDir != "" {
+		// Custom dir supplied: skip migration (user manages this dir explicitly).
+		return configDir, remainingArgs
+	}
+	remainingArgs = args
+
+	// Priority 2 & 3: XDG / HOME
+	configDir = DefaultConfigDir(appName)
+
+	// Migration: ~/.<appName> → new XDG path
+	if home, err := os.UserHomeDir(); err == nil {
+		legacyPath := filepath.Join(home, "."+appName)
+		migrateConfigDir(legacyPath, configDir)
+	}
+
+	return configDir, remainingArgs
+}
+
+// extractConfigArg scans args for "--config <dir>" and returns the dir and the
+// remaining args with the "--config <dir>" pair removed.
+// Returns an empty string and the original args when "--config" is absent or has no value.
+func extractConfigArg(args []string) (configDir string, remainingArgs []string) {
+	remainingArgs = make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--config" && i+1 < len(args) {
+			configDir = args[i+1]
+			// Skip both "--config" and its value
+			i++
+		} else {
+			remainingArgs = append(remainingArgs, args[i])
+		}
+	}
+	return configDir, remainingArgs
+}
+
+// migrateConfigDir renames oldPath to newPath when oldPath exists and newPath does not.
+// A message is printed to stderr on success or failure.
+func migrateConfigDir(oldPath, newPath string) {
+	if _, err := os.Stat(oldPath); os.IsNotExist(err) {
+		// Nothing to migrate.
+		return
+	}
+	if _, err := os.Stat(newPath); err == nil {
+		// New path already exists — do not overwrite.
+		return
+	}
+	// Ensure parent directory exists.
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: config migration: could not create parent dir %s: %v\n", filepath.Dir(newPath), err)
+		return
+	}
+	if err := os.Rename(oldPath, newPath); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: config migration: could not rename %s → %s: %v\n", oldPath, newPath, err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "info: config dir migrated from %s to %s\n", oldPath, newPath)
 }
