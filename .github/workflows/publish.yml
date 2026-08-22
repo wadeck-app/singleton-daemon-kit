@@ -7,6 +7,15 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Stable version (e.g. 1.2.0)'
+        required: false
+        default: ''
+      breaking:
+        description: 'Breaking change? (true/false)'
+        required: false
+        default: 'false'
 
 jobs:
   publish:
@@ -25,6 +34,10 @@ jobs:
       - name: Compute version
         id: version
         run: bash ci/scripts/compute-version.sh
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          VERSION_INPUT: ${{ github.event.inputs.version }}
+          BREAKING_INPUT: ${{ github.event.inputs.breaking }}
 
       - name: Set package version
         run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
