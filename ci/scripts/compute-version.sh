@@ -28,7 +28,11 @@ if [[ "$EVENT" == "workflow_dispatch" && -n "$VERSION_INPUT" ]]; then
 else
   # Push to main (default): edge release with date-based version
   DATE=$(date -u '+%Y.%m.%d')
-  BUILD=$(git -C "$REPO_ROOT" rev-list --count HEAD)
+  # Zero-pad BUILD to 3 digits minimum (e.g. 001, 015, 142).
+  # Without padding, going from commit 9 to 10 on the same day produces
+  # "2026.08.23-9-..." < "2026.08.23-10-..." in lexicographic order (9 > 1),
+  # which breaks "is this version newer?" comparisons in npm and GitLab UI.
+  BUILD=$(printf '%03d' "$(git -C "$REPO_ROOT" rev-list --count HEAD)")
   SHA=$(git -C "$REPO_ROOT" rev-parse --short=8 HEAD)
   VERSION="${DATE}-${BUILD}-${SHA}"
   NPM_TAG="edge"
