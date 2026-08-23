@@ -631,3 +631,107 @@ func TestHasConsole_doesNotPanic(t *testing.T) {
 	}()
 	_ = hasConsole()
 }
+
+// --- checkSentinels ---
+
+// closeTestLogFile releases the global log file handle so t.TempDir() can clean up
+// on Windows (which rejects RemoveAll when the log file is still open).
+func closeTestLogFile() {
+	logMu.Lock()
+	defer logMu.Unlock()
+	if logFile != nil {
+		logFile.Close()
+		logFile = nil
+		logDay = ""
+	}
+}
+
+func TestCheckSentinels_noSentinels(t *testing.T) {
+	dir := t.TempDir()
+	// closeTestLogFile must be registered AFTER t.TempDir() so LIFO order runs
+	// the log-file close before the directory removal (Windows file-lock fix).
+	t.Cleanup(closeTestLogFile)
+	cfg := Config{ConfigDir: dir}
+	result := checkSentinels(dir, cfg)
+	if result.action != sentinelNone {
+		t.Errorf("expected sentinelNone, got %d (%s)", result.action, result.reason)
+	}
+}
+
+func TestCheckSentinels_updateSentinelNoCmd(t *testing.T) {
+	dir := t.TempDir()
+	t.Cleanup(closeTestLogFile)
+	os.WriteFile(filepath.Join(dir, "config.update"), []byte("{}"), 0o600)
+	cfg := Config{ConfigDir: dir}
+	result := checkSentinels(dir, cfg)
+	if result.action != sentinelNone {
+		t.Errorf("expected sentinelNone when UpdateCmd is empty, got %d (%s)", result.action, result.reason)
+	}
+	// Sentinel file must have been removed (it was consumed even though action is None).
+	if _, err := os.Stat(filepath.Join(dir, "config.update")); !os.IsNotExist(err) {
+		t.Error("config.update should have been removed after being read")
+	}
+}
+
+func TestCheckSentinels_updateSentinelWithValidCmd(t *testing.T) {
+	dir := t.TempDir()
+	t.Cleanup(closeTestLogFile)
+	os.WriteFile(filepath.Join(dir, "config.update"), []byte("{}"), 0o600)
+	cfg := Config{
+		ConfigDir: dir,
+		UpdateCmd: []string{"npm", "install", "-g", "@wadeck/wdrive"},
+	}
+	result := checkSentinels(dir, cfg)
+	if result.action != sentinelUpdate {
+		t.Errorf("expected sentinelUpdate, got %d (%s)", result.action, result.reason)
+	}
+	// Sentinel file must have been removed.
+	if _, err := os.Stat(filepath.Join(dir, "config.update")); !os.IsNotExist(err) {
+		t.Error("config.update should have been removed")
+	}
+}
+
+func TestCheckSentinels_updateSentinelWithInvalidCmd(t *testing.T) {
+	dir := t.TempDir()
+	t.Cleanup(closeTestLogFile)
+	os.WriteFile(filepath.Join(dir, "config.update"), []byte("{}"), 0o600)
+	cfg := Config{
+		ConfigDir: dir,
+		// Invalid: only 3 args, wrong binary — validateUpdateCmd will reject this.
+		UpdateCmd: []string{"sh", "-c", "evil"},
+	}
+	result := checkSentinels(dir, cfg)
+	if result.action != sentinelNone {
+		t.Errorf("expected sentinelNone for invalid UpdateCmd, got %d (%s)", result.action, result.reason)
+	}
+}
+
+func TestCheckSentinels_restartSentinel(t *testing.T) {
+	dir := t.TempDir()
+	t.Cleanup(closeTestLogFile)
+	os.WriteFile(filepath.Join(dir, "config.restart"), []byte(""), 0o600)
+	cfg := Config{ConfigDir: dir}
+	result := checkSentinels(dir, cfg)
+	if result.action != sentinelRestart {
+		t.Errorf("expected sentinelRestart, got %d (%s)", result.action, result.reason)
+	}
+	// Sentinel file must have been removed.
+	if _, err := os.Stat(filepath.Join(dir, "config.restart")); !os.IsNotExist(err) {
+		t.Error("config.restart should have been removed after restart is triggered")
+	}
+}
+
+func TestCheckSentinels_restartPreservedWhenUpdateCmdNotSet(t *testing.T) {
+	// Critical regression: config.update present but UpdateCmd is empty.
+	// The update sentinel must be consumed (removed) and execution must fall through
+	// to the restart check so config.restart is honoured — the wdrive pre-T9 flow.
+	dir := t.TempDir()
+	t.Cleanup(closeTestLogFile)
+	os.WriteFile(filepath.Join(dir, "config.update"), []byte("{}"), 0o600)
+	os.WriteFile(filepath.Join(dir, "config.restart"), []byte(""), 0o600)
+	cfg := Config{ConfigDir: dir} // UpdateCmd intentionally absent
+	result := checkSentinels(dir, cfg)
+	if result.action != sentinelRestart {
+		t.Errorf("expected sentinelRestart when UpdateCmd is unset and config.restart is present, got %d (%s)", result.action, result.reason)
+	}
+}

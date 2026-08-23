@@ -223,6 +223,65 @@ func runCLIDispatch(cfg Config, args []string) {
 	os.Exit(0)
 }
 
+type sentinelAction int
+
+const (
+	sentinelNone    sentinelAction = iota
+	sentinelRestart                // restart the daemon
+	sentinelUpdate                 // spawn update command and exit
+)
+
+type sentinelResult struct {
+	action sentinelAction
+	reason string // human-readable for logging
+}
+
+// checkSentinels reads the config.update and config.restart sentinel files in configDir.
+// Returns what action to take. Removes the relevant sentinel file if found.
+// cfg is used to validate UpdateCmd when the update sentinel is present.
+func checkSentinels(configDir string, cfg Config) sentinelResult {
+	updateSentinelPath := filepath.Join(configDir, "config.update")
+	restartSentinelPath := filepath.Join(configDir, "config.restart")
+
+	// Check for update sentinel first.
+	if _, err := os.Stat(updateSentinelPath); err == nil {
+		if removeErr := os.Remove(updateSentinelPath); removeErr != nil {
+			logWarn(configDir, "launcher", fmt.Sprintf("update sentinel found but could not remove (%v) — not triggering update", removeErr))
+			return sentinelResult{action: sentinelNone, reason: "update sentinel remove failed"}
+		}
+		if len(cfg.UpdateCmd) == 0 {
+			logWarn(configDir, "launcher", "update sentinel detected but UpdateCmd is not set — ignoring (set Config.UpdateCmd to enable auto-update)")
+			// Fall through to restart check.
+		} else if err := validateUpdateCmd(cfg.UpdateCmd); err != nil {
+			logError(configDir, "launcher", fmt.Sprintf("updateCmd validation failed: %v — not spawning update", err))
+			// Fall through to restart check.
+		} else {
+			logInfo(configDir, "launcher", fmt.Sprintf("update sentinel detected — spawning: %v", cfg.UpdateCmd))
+			return sentinelResult{action: sentinelUpdate, reason: fmt.Sprintf("update sentinel: %v", cfg.UpdateCmd)}
+		}
+	}
+
+	// Check for restart sentinel.
+	if _, err := os.Stat(restartSentinelPath); err == nil {
+		logInfo(configDir, "launcher", "restart sentinel detected — relaunching")
+		if removeErr := os.Remove(restartSentinelPath); removeErr == nil {
+			return sentinelResult{action: sentinelRestart, reason: "restart sentinel"}
+		} else {
+			logWarn(configDir, "launcher", fmt.Sprintf("restart sentinel found but could not remove (%v) — not relaunching", removeErr))
+			return sentinelResult{action: sentinelNone, reason: "restart sentinel remove failed"}
+		}
+	} else {
+		sentinelMsg := formatSentinelReadError(restartSentinelPath, err)
+		if os.IsNotExist(err) {
+			logInfo(configDir, "launcher", sentinelMsg)
+		} else {
+			logWarn(configDir, "launcher", sentinelMsg)
+		}
+	}
+
+	return sentinelResult{action: sentinelNone, reason: "no sentinel found"}
+}
+
 // runDaemon spawns node.exe with the .cjs script and stays alive until it exits.
 // On Windows a Job Object ensures the child is killed when this process dies.
 func runDaemon(cfg Config, args []string) {
@@ -313,43 +372,18 @@ func runDaemon(cfg Config, args []string) {
 	// Check sentinels written by Node before it exited.
 	// Node cannot spawn a new launcher binary outside the Job Object — only the Go
 	// launcher (which is not in the Job Object) can safely re-spawn or trigger an update.
-	sentinelPath := filepath.Join(cfg.ConfigDir, "config.restart")
-	updateSentinelPath := filepath.Join(cfg.ConfigDir, "config.update")
-	logInfo(cfg.ConfigDir, "launcher", fmt.Sprintf("post-exit check: exitCode=%d sentinelPath=%s", exitCode, sentinelPath))
+	logInfo(cfg.ConfigDir, "launcher", fmt.Sprintf("post-exit check: exitCode=%d", exitCode))
 	if exitCode == 0 {
-		// Check for update sentinel written by Node when it wants an in-place binary update.
-		// The launcher spawns UpdateCmd as a detached process, then exits immediately so
-		// the running .exe is unlocked and npm can overwrite it (Windows EPERM fix).
-		if _, err := os.Stat(updateSentinelPath); err == nil {
-			if removeErr := os.Remove(updateSentinelPath); removeErr != nil {
-				logWarn(cfg.ConfigDir, "launcher", fmt.Sprintf("update sentinel found but could not remove (%v) — not triggering update", removeErr))
-			} else if len(cfg.UpdateCmd) == 0 {
-				logWarn(cfg.ConfigDir, "launcher", "update sentinel detected but UpdateCmd is not set — ignoring (set Config.UpdateCmd to enable auto-update)")
-			} else if err := validateUpdateCmd(cfg.UpdateCmd); err != nil {
-				logError(cfg.ConfigDir, "launcher", fmt.Sprintf("updateCmd validation failed: %v — not spawning update", err))
-			} else {
-				logInfo(cfg.ConfigDir, "launcher", fmt.Sprintf("update sentinel detected — spawning: %v", cfg.UpdateCmd))
-				spawnUpdateAndExit(cfg.ConfigDir, cfg.UpdateCmd)
-				// spawnUpdateAndExit calls os.Exit — unreachable.
-			}
-		}
-	}
-	if exitCode == 0 {
-		if _, err := os.Stat(sentinelPath); err == nil {
-			logInfo(cfg.ConfigDir, "launcher", "restart sentinel detected — relaunching")
-			if removeErr := os.Remove(sentinelPath); removeErr == nil {
-				runDaemon(cfg, args)
-				return
-			} else {
-				logWarn(cfg.ConfigDir, "launcher", fmt.Sprintf("restart sentinel found but could not remove (%v) — not relaunching", removeErr))
-			}
-		} else {
-			sentinelMsg := formatSentinelReadError(sentinelPath, err)
-			if os.IsNotExist(err) {
-				logInfo(cfg.ConfigDir, "launcher", sentinelMsg)
-			} else {
-				logWarn(cfg.ConfigDir, "launcher", sentinelMsg)
-			}
+		result := checkSentinels(cfg.ConfigDir, cfg)
+		switch result.action {
+		case sentinelUpdate:
+			spawnUpdateAndExit(cfg.ConfigDir, cfg.UpdateCmd)
+			// spawnUpdateAndExit calls os.Exit — unreachable.
+		case sentinelRestart:
+			runDaemon(cfg, args)
+			return
+		case sentinelNone:
+			// No sentinel — fall through to os.Exit below.
 		}
 	}
 
