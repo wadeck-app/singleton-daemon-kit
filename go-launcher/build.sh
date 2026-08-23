@@ -60,6 +60,7 @@ DEFAULT_CONFIG_DIR=$(node -e "const c=require('$CONFIG_FILE'); process.stdout.wr
 # CLIFlags as a JSON array string, used below for template generation
 CLI_FLAGS_JSON=$(node -e "const c=require('$CONFIG_FILE'); process.stdout.write(JSON.stringify(c.cliFlags))")
 SILENT_FLAGS_JSON=$(node -e "const c=require('$CONFIG_FILE'); process.stdout.write(JSON.stringify(c.silentFlags || []))")
+UPDATE_CMD_JSON=$(node -e "const c=require('$CONFIG_FILE'); process.stdout.write(JSON.stringify(c.updateCmd || []))")
 
 if [[ -z "$APP_NAME" ]]; then
   echo "Error: 'appName' is missing or empty in $CONFIG_FILE" >&2
@@ -99,16 +100,18 @@ TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
 # --- Generate main.go from template using node ---
-node - "$TEMPLATE_FILE" "$APP_NAME" "$NODE_SCRIPT" "$DEFAULT_CONFIG_DIR" "$CLI_FLAGS_JSON" "$SILENT_FLAGS_JSON" "$TMPDIR" <<'EOF'
+node - "$TEMPLATE_FILE" "$APP_NAME" "$NODE_SCRIPT" "$DEFAULT_CONFIG_DIR" "$CLI_FLAGS_JSON" "$SILENT_FLAGS_JSON" "$UPDATE_CMD_JSON" "$TMPDIR" <<'EOF'
 const fs = require('fs');
 const path = require('path');
 
-const [templateFile, appName, nodeScript, defaultConfigDir, cliFlagsJson, silentFlagsJson, outDir] = process.argv.slice(2);
+const [templateFile, appName, nodeScript, defaultConfigDir, cliFlagsJson, silentFlagsJson, updateCmdJson, outDir] = process.argv.slice(2);
 
 const cliFlags = JSON.parse(cliFlagsJson);
 const silentFlags = JSON.parse(silentFlagsJson);
+const updateCmd = JSON.parse(updateCmdJson);
 const flagLines = cliFlags.map(f => `\t\t\t"${f}",`).join('\n');
 const silentLines = silentFlags.map(f => `\t\t\t"${f}",`).join('\n');
+const updateCmdLines = updateCmd.map(f => `\t\t\t"${f}",`).join('\n');
 
 let tmpl = fs.readFileSync(templateFile, 'utf8');
 tmpl = tmpl.replace(/\{\{\.AppName\}\}/g, appName);
@@ -118,6 +121,8 @@ tmpl = tmpl.replace(/\{\{\.NodeScript\}\}/g, nodeScript);
 tmpl = tmpl.replace(/\{\{range \.CLIFlags\}\}.*?\{\{end\}\}/s, flagLines + '\n');
 // Replace the SilentFlags range block
 tmpl = tmpl.replace(/\{\{range \.SilentFlags\}\}.*?\{\{end\}\}/s, silentLines + '\n');
+// Replace the UpdateCmd range block
+tmpl = tmpl.replace(/\{\{range \.UpdateCmd\}\}.*?\{\{end\}\}/s, updateCmdLines + '\n');
 
 fs.writeFileSync(path.join(outDir, 'main.go'), tmpl, 'utf8');
 EOF

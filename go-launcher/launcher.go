@@ -66,6 +66,38 @@ type Config struct {
 	// (e.g. after stripping --config <dir> via ResolveConfigDir). When nil,
 	// os.Args[1:] is used.
 	Args []string
+
+	// UpdateCmd is the command spawned when the daemon writes a config.update
+	// sentinel before exiting to request an in-place binary update.
+	// On Windows, the launcher exits immediately after spawning this command so
+	// that the running .exe is no longer locked and npm can overwrite it.
+	//
+	// Only "npm install -g @wadeck/<pkg>[@<version>]" is accepted (exactly 4 args).
+	// Any other command is rejected to prevent launcher.config.json injection attacks.
+	// Leave nil or empty to disable update support (config.update sentinel is ignored).
+	UpdateCmd []string `json:"updateCmd,omitempty"`
+}
+
+// validateUpdateCmd checks that UpdateCmd is a safe npm install command.
+// Allowed: exactly ["npm", "install", "-g", "@wadeck/<pkg>[@<version>]"].
+// Any other form is rejected to prevent launcher.config.json being used as a
+// code-execution vector.
+func validateUpdateCmd(cmd []string) error {
+	if len(cmd) == 0 {
+		// Not set — OK.
+		return nil
+	}
+	if len(cmd) != 4 {
+		return fmt.Errorf("updateCmd: expected exactly 4 args [npm install -g @wadeck/<pkg>], got %d", len(cmd))
+	}
+	if cmd[0] != "npm" || cmd[1] != "install" || cmd[2] != "-g" {
+		return fmt.Errorf("updateCmd: only 'npm install -g @wadeck/<pkg>' is allowed, got %v", cmd)
+	}
+	pkg := cmd[3]
+	if !strings.HasPrefix(pkg, "@wadeck/") {
+		return fmt.Errorf("updateCmd: package must start with @wadeck/, got %q", pkg)
+	}
+	return nil
 }
 
 // Run is the launcher entrypoint — it never returns.
@@ -278,11 +310,30 @@ func runDaemon(cfg Config, args []string) {
 
 	close(stopSignals)
 
-	// Check for restart sentinel written by Node before it exited.
+	// Check sentinels written by Node before it exited.
 	// Node cannot spawn a new launcher binary outside the Job Object — only the Go
-	// launcher (which is not in the Job Object) can safely re-spawn.
+	// launcher (which is not in the Job Object) can safely re-spawn or trigger an update.
 	sentinelPath := filepath.Join(cfg.ConfigDir, "config.restart")
+	updateSentinelPath := filepath.Join(cfg.ConfigDir, "config.update")
 	logInfo(cfg.ConfigDir, "launcher", fmt.Sprintf("post-exit check: exitCode=%d sentinelPath=%s", exitCode, sentinelPath))
+	if exitCode == 0 {
+		// Check for update sentinel written by Node when it wants an in-place binary update.
+		// The launcher spawns UpdateCmd as a detached process, then exits immediately so
+		// the running .exe is unlocked and npm can overwrite it (Windows EPERM fix).
+		if _, err := os.Stat(updateSentinelPath); err == nil {
+			if removeErr := os.Remove(updateSentinelPath); removeErr != nil {
+				logWarn(cfg.ConfigDir, "launcher", fmt.Sprintf("update sentinel found but could not remove (%v) — not triggering update", removeErr))
+			} else if len(cfg.UpdateCmd) == 0 {
+				logWarn(cfg.ConfigDir, "launcher", "update sentinel detected but UpdateCmd is not set — ignoring (set Config.UpdateCmd to enable auto-update)")
+			} else if err := validateUpdateCmd(cfg.UpdateCmd); err != nil {
+				logError(cfg.ConfigDir, "launcher", fmt.Sprintf("updateCmd validation failed: %v — not spawning update", err))
+			} else {
+				logInfo(cfg.ConfigDir, "launcher", fmt.Sprintf("update sentinel detected — spawning: %v", cfg.UpdateCmd))
+				spawnUpdateAndExit(cfg.ConfigDir, cfg.UpdateCmd)
+				// spawnUpdateAndExit calls os.Exit — unreachable.
+			}
+		}
+	}
 	if exitCode == 0 {
 		if _, err := os.Stat(sentinelPath); err == nil {
 			logInfo(cfg.ConfigDir, "launcher", "restart sentinel detected — relaunching")

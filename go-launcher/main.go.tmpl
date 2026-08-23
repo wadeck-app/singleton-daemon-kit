@@ -40,5 +40,8 @@ func main() {
 		SilentFlags: []string{
 {{range .SilentFlags}}			"{{.}}",
 {{end}}		},
+		UpdateCmd: []string{
+{{range .UpdateCmd}}			"{{.}}",
+{{end}}		},
 	})
 }
