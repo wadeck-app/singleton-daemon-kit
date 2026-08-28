@@ -423,6 +423,12 @@ func ResolveConfigDir(appName string, args []string) (configDir string, remainin
 	// Priority 1: --config <dir> from CLI args
 	configDir, remainingArgs = extractConfigArg(args)
 	if configDir != "" {
+		// Expand ~/ to home dir (shell does not expand ~ for detached processes).
+		if strings.HasPrefix(configDir, "~/") || strings.HasPrefix(configDir, "~\\") {
+			if home, err := os.UserHomeDir(); err == nil {
+				configDir = filepath.Join(home, configDir[2:])
+			}
+		}
 		// Custom dir supplied: skip migration (user manages this dir explicitly).
 		return configDir, remainingArgs
 	}
