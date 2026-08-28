@@ -523,6 +523,79 @@ func TestValidateUpdateCmd_wrongScope(t *testing.T) {
 	}
 }
 
+// --- looksLikePath ---
+
+func TestLooksLikePath_unixAbsolute(t *testing.T) {
+	if !looksLikePath("/home/user/.config/wdrive") {
+		t.Error("expected true for unix absolute path")
+	}
+}
+
+func TestLooksLikePath_homeRelative(t *testing.T) {
+	if !looksLikePath("~/.wdrive2") {
+		t.Error("expected true for ~ path")
+	}
+}
+
+func TestLooksLikePath_windowsAbsolute(t *testing.T) {
+	if !looksLikePath(`C:\Users\Wadeck\.wdrive2`) {
+		t.Error("expected true for Windows absolute path")
+	}
+}
+
+func TestLooksLikePath_flag(t *testing.T) {
+	if looksLikePath("--quit") {
+		t.Error("expected false for flag")
+	}
+}
+
+func TestLooksLikePath_subcommand(t *testing.T) {
+	if looksLikePath("sync") {
+		t.Error("expected false for subcommand")
+	}
+}
+
+// --- extractConfigArg: legacy positional arg ---
+
+func TestExtractConfigArg_positionalUnix(t *testing.T) {
+	dir, remaining := extractConfigArg([]string{"/home/user/.wdrive2"})
+	if dir != "/home/user/.wdrive2" {
+		t.Errorf("expected positional to be extracted, got %q", dir)
+	}
+	if len(remaining) != 0 {
+		t.Errorf("expected empty remaining, got %v", remaining)
+	}
+}
+
+func TestExtractConfigArg_positionalWindows(t *testing.T) {
+	dir, remaining := extractConfigArg([]string{`C:\Users\Wadeck\.wdrive2`})
+	if dir != `C:\Users\Wadeck\.wdrive2` {
+		t.Errorf("expected positional to be extracted, got %q", dir)
+	}
+	if len(remaining) != 0 {
+		t.Errorf("expected empty remaining, got %v", remaining)
+	}
+}
+
+func TestExtractConfigArg_positionalNotExtractedIfNotFirst(t *testing.T) {
+	// A path in position 1 or later is NOT treated as config dir (only argv[0] is)
+	dir, remaining := extractConfigArg([]string{"--other", "/home/user/.wdrive2"})
+	if dir != "" {
+		t.Errorf("expected no config dir, got %q", dir)
+	}
+	if len(remaining) != 2 {
+		t.Errorf("expected both args in remaining, got %v", remaining)
+	}
+}
+
+func TestExtractConfigArg_flagTakesPrecedenceOverPositional(t *testing.T) {
+	// --config flag wins if both are present
+	dir, _ := extractConfigArg([]string{"--config", "/new/path", "/old/positional"})
+	if dir != "/new/path" {
+		t.Errorf("expected --config value, got %q", dir)
+	}
+}
+
 // --- Config.UpdateCmd field ---
 
 func TestConfig_updateCmdField(t *testing.T) {

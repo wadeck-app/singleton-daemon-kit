@@ -442,7 +442,10 @@ func ResolveConfigDir(appName string, args []string) (configDir string, remainin
 
 // extractConfigArg scans args for "--config <dir>" and returns the dir and the
 // remaining args with the "--config <dir>" pair removed.
-// Returns an empty string and the original args when "--config" is absent or has no value.
+// Also accepts a bare positional path as the first argument (legacy format:
+// "wdrive.exe /path/to/configDir") for backward compatibility with registry
+// entries created before the --config flag was introduced.
+// Returns an empty string and the original args when no config dir is found.
 func extractConfigArg(args []string) (configDir string, remainingArgs []string) {
 	remainingArgs = make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
@@ -450,11 +453,32 @@ func extractConfigArg(args []string) (configDir string, remainingArgs []string) 
 			configDir = args[i+1]
 			// Skip both "--config" and its value
 			i++
+		} else if configDir == "" && i == 0 && looksLikePath(args[i]) {
+			// Legacy positional config dir: first arg is a bare directory path.
+			// Consumed here so the launcher and Node agree on the config dir.
+			configDir = args[i]
 		} else {
 			remainingArgs = append(remainingArgs, args[i])
 		}
 	}
 	return configDir, remainingArgs
+}
+
+// looksLikePath returns true when s appears to be an absolute or home-relative
+// directory path rather than a flag or subcommand name.
+func looksLikePath(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	// Unix absolute or home-relative
+	if s[0] == '/' || s[0] == '~' {
+		return true
+	}
+	// Windows absolute: C:\... or C:/...
+	if len(s) >= 3 && s[1] == ':' && (s[2] == '\\' || s[2] == '/') {
+		return true
+	}
+	return false
 }
 
 // migrateConfigDir renames oldPath to newPath when oldPath exists and newPath does not.
