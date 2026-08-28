@@ -1,8 +1,9 @@
-name: Publish
+name: CI / Publish
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
     inputs:
       version:
@@ -14,11 +15,28 @@ on:
         required: false
         default: 'false'
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
-  publish:
+  build-and-test:
     runs-on: ubuntu-latest
-    permissions:
-      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - run: npm ci
+
+      - run: npm run check
+
+  publish:
+    needs: build-and-test
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,8 +60,6 @@ jobs:
         run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
 
       - run: npm run build
-
-      - run: npm test
 
       - name: Configure auth for GitHub Packages
         run: |
