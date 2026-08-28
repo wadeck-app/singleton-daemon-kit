@@ -1,8 +1,5 @@
 name: CI
 
-env:
-  NPM_REGISTRY_PATH: //api.backup.wadeck.ch/npm
-
 on:
   push:
   pull_request:

@@ -7,14 +7,14 @@ TypeScript SDK for the singleton daemon pattern - port file, process takeover, h
 Add the private registry to `~/.npmrc`:
 
 ```
-@wadeck:registry=https://gitlab.com/api/v4/packages/npm/
-//gitlab.com/api/v4/packages/npm/:_authToken=<your-read-token>
+@wadeck-app:registry=https://npm.pkg.github.com/
+//npm.pkg.github.com/:_authToken=<ghp_...>
 ```
 
 Then install:
 
 ```sh
-npm install @wadeck/singleton-daemon-kit
+npm install @wadeck-app/singleton-daemon-kit
 ```
 
 ## Quick start
@@ -50,31 +50,29 @@ if (await client.isRunning()) {
 
 ## npm Registry
 
-Packages are hosted on **GitLab Packages** - source code remains on GitHub.
+Packages are hosted on **GitHub Packages**.
 
 | Item | Value |
 |------|-------|
-| Registry URL | `https://gitlab.com/api/v4/packages/npm/` |
-| GitLab project (namespace only) | `https://gitlab.com/wadeck/npm-registry` |
-| Scope | `@wadeck` |
-| Install token | GitLab deploy token with `read_package_registry` scope |
-| Publish token | GitLab deploy token with `write_package_registry` scope |
+| Registry URL | `https://npm.pkg.github.com/` |
+| GitHub repo | `https://github.com/wadeck-app/singleton-daemon-kit` |
+| Scope | `@wadeck-app` |
+| Install token | GitHub PAT with `read:packages` scope |
+| Publish token | `GITHUB_TOKEN` (automatic in CI) |
 
 ### Local ~/.npmrc setup
 
 ```
-@wadeck:registry=https://gitlab.com/api/v4/packages/npm/
-//gitlab.com/api/v4/packages/npm/:_authToken=<read-token>
-auth-type=legacy
+@wadeck-app:registry=https://npm.pkg.github.com/
+//npm.pkg.github.com/:_authToken=<ghp_...>
 ```
 
 ### CI secrets (GitHub Actions)
 
 | Repo | Secret | Token type |
 |------|--------|------------|
-| `Wadeck/singleton-daemon-kit` | `GITLAB_NPM_WRITE_TOKEN` | write deploy token |
-| `<owner>/<repo>` | `GITLAB_NPM_READ_TOKEN` | read deploy token |
-| `Wadeck/agent-fleet` | `GITLAB_NPM_READ_TOKEN` | read deploy token |
+| `wadeck-app/singleton-daemon-kit` | `GITHUB_TOKEN` | automatic |
+| `<owner>/<repo>` | PAT secret | `read:packages` PAT |
 
 Publishing happens automatically on every push to `main` via `.github/workflows/publish.yml`.
 

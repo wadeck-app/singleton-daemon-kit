@@ -1,8 +1,5 @@
 name: Publish
 
-env:
-  GITLAB_NPM_REGISTRY_PATH: //gitlab.com/api/v4/projects/84445653/packages/npm/
-
 on:
   push:
     branches: [main]
@@ -20,6 +17,8 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,28 +45,12 @@ jobs:
 
       - run: npm test
 
-      - name: Configure auth for GitLab npm registry
+      - name: Configure auth for GitHub Packages
         run: |
-          # Trim whitespace and validate token format
-          TOKEN=$(echo "${GITLAB_NPM_WRITE_TOKEN}" | tr -d '[:space:]')
-          if [ -z "$TOKEN" ]; then
-            echo "ERROR: GITLAB_NPM_WRITE_TOKEN is empty after trim"
-            exit 1
-          fi
-          if [[ "$TOKEN" != gldt-* ]]; then
-            echo "ERROR: GITLAB_NPM_WRITE_TOKEN does not start with 'gldt-'"
-            exit 1
-          fi
-          echo "=== Token preview: ${TOKEN:0:9}*** ==="
-
-          echo "@wadeck:registry=https:${GITLAB_NPM_REGISTRY_PATH}" >> .npmrc
-          echo "${GITLAB_NPM_REGISTRY_PATH}:_authToken=${TOKEN}" >> .npmrc
-          echo "auth-type=legacy" >> .npmrc
-          echo "=== .npmrc (token masked) ===" && sed 's/_authToken=.*/_authToken=***/' .npmrc
-          echo "=== whoami ===" && curl -s "https:${GITLAB_NPM_REGISTRY_PATH}-/whoami" -H "Authorization: Bearer ${TOKEN}"
-          echo ""
+          echo "@wadeck-app:registry=https://npm.pkg.github.com/" >> ~/.npmrc
+          echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> ~/.npmrc
         env:
-          GITLAB_NPM_WRITE_TOKEN: ${{ secrets.GITLAB_NPM_WRITE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish
         run: |

@@ -46,24 +46,22 @@ Use this when the launcher binary and the `.cjs` bundle are in different npm pac
 
 **One-time local setup** (`~/.npmrc`, never committed):
 ```
-@wadeck:registry=https://gitlab.com/api/v4/packages/npm/
-//gitlab.com/api/v4/packages/npm/:_authToken=<your GitLab personal access token>
+@wadeck-app:registry=https://npm.pkg.github.com/
+//npm.pkg.github.com/:_authToken=<your GitHub PAT with read:packages scope>
 ```
 
 **No project `.npmrc` needed.** Scope config lives in `~/.npmrc` locally and in CI via the setup step below.
 
-**`publishConfig`** in publishable `package.json` uses the project-level URL — intentional, required by GitLab to publish to a specific project:
+**`publishConfig`** in publishable `package.json`:
 ```json
-"publishConfig": { "@wadeck:registry": "https://gitlab.com/api/v4/projects/84445653/packages/npm/" }
+"publishConfig": { "@wadeck-app:registry": "https://npm.pkg.github.com/" }
 ```
 
-**CI setup step** — requires TWO auth lines. GitLab always returns project-level tarball URLs in package metadata, so `npm ci` needs auth for both the group-level scope URL and the project-level download URL:
+**CI setup step** — single auth line is sufficient for GitHub Packages:
 ```bash
-echo "@wadeck:registry=https://gitlab.com/api/v4/packages/npm/" >> ~/.npmrc
-echo "//gitlab.com/api/v4/packages/npm/:_authToken=${TOKEN}" >> ~/.npmrc
-echo "//gitlab.com/api/v4/projects/84445653/packages/npm/:_authToken=${TOKEN}" >> ~/.npmrc
+echo "@wadeck-app:registry=https://npm.pkg.github.com/" >> ~/.npmrc
+echo "//npm.pkg.github.com/:_authToken=${TOKEN}" >> ~/.npmrc
 ```
-Omitting the third line causes `404 Project not found` for `@wadeck` tarballs in CI.
 
 ## Contributing
 

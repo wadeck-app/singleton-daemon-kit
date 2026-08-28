@@ -1,5 +1,5 @@
 {
-  "name": "@wadeck/singleton-daemon-kit",
+  "name": "@wadeck-app/singleton-daemon-kit",
   "//version": "DO NOT manually edit this field. CI overwrites it via ci/scripts/compute-version.sh using format 1.YYYYMMDDHHMMSS.BUILD (e.g. 1.20260820143022.320). The value here is just a placeholder.",
   "version": "1.0.1",
   "description": "Singleton daemon pattern — port file, takeover, health HTTP, CLI dispatch",
@@ -11,8 +11,12 @@
     "test": "vitest run",
     "check": "tsc --noEmit && vitest run"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wadeck-app/singleton-daemon-kit.git"
+  },
   "publishConfig": {
-    "@wadeck:registry": "https://gitlab.com/api/v4/projects/84445653/packages/npm/"
+    "@wadeck-app:registry": "https://npm.pkg.github.com/"
   },
   "devDependencies": {
     "typescript": "^5.4.0",
