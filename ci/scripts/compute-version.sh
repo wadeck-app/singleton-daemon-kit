@@ -35,7 +35,7 @@ else
   BUILD=$(printf '%03d' "$(git -C "$REPO_ROOT" rev-list --count HEAD)")
   SHA=$(git -C "$REPO_ROOT" rev-parse --short=8 HEAD)
   VERSION="${DATE}-${BUILD}-${SHA}"
-  NPM_TAG="edge"
+  NPM_TAG="latest"
 fi
 
 OUT="${GITHUB_OUTPUT:-/dev/stdout}"
