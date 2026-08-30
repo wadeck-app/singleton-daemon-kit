@@ -20,9 +20,10 @@ func spawnUpdateAndExit(configDir string, cmd []string) {
 	c.SysProcAttr = &syscall.SysProcAttr{
 		// HideWindow prevents a console popup when spawned from a windowless process.
 		HideWindow: true,
-		// DETACHED_PROCESS (0x00000008) ensures the child has no console attached,
-		// so it cannot accidentally inherit the launcher's console handle.
-		CreationFlags: 0x00000008,
+		// CREATE_NO_WINDOW (0x08000000) suppresses console creation for npm and all its
+		// child processes (node scripts, etc.) that would otherwise flash a terminal window.
+		// DETACHED_PROCESS (0x00000008) ensures no console handle is inherited.
+		CreationFlags: 0x08000000 | 0x00000008,
 	}
 	if err := c.Start(); err != nil {
 		logError(configDir, "launcher", fmt.Sprintf("failed to spawn update command %v: %v", cmd, err))
