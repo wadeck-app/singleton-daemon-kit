@@ -80,7 +80,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e
-          npm publish --tag ${{ steps.version.outputs.npm_tag }}
+          npm publish --tag ${{ steps.version.outputs.dist_tag }}
           EXIT=$?
           set -e
           if [ $EXIT -ne 0 ]; then
