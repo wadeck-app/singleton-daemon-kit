@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 )
 
@@ -17,45 +18,73 @@ func spawnUpdateAndExit(configDir string, cmd []string) {
 	fmt.Fprintf(os.Stderr, "Spawning update: %v, exiting to release file lock\n", cmd)
 	logInfo(configDir, "launcher", fmt.Sprintf("spawning update command (detached): %v", cmd))
 
-	// Run via Node.js + npm-cli.js to avoid cmd.exe/.cmd batch files.
-	// cmd.exe spawns multiple console-visible sub-processes for npm.cmd → 20-40 terminal flashes.
-	// Using `node npm-cli.js` directly keeps everything in a single hidden Node process.
-	nodePath, nodeErr := exec.LookPath("node")
-	npmCliPath := ""
-	if nodeErr == nil {
-		npmCliPath = filepath.Join(filepath.Dir(nodePath), "node_modules", "npm", "bin", "npm-cli.js")
-		if _, err := os.Stat(npmCliPath); err != nil {
-			npmCliPath = ""
-		}
+	// Use wscript.exe + VBScript with SW_HIDE=0 — the most reliable way to
+	// suppress ALL console windows on Windows, including npm lifecycle scripts.
+	// SW_HIDE propagates to every child process spawned by the VBS script.
+	vbsPath := filepath.Join(configDir, "update-runner.vbs")
+	if err := writeUpdateVbs(vbsPath, cmd); err != nil {
+		logError(configDir, "launcher", fmt.Sprintf("failed to write update VBS: %v", err))
+		fmt.Fprintf(os.Stderr, "Error: failed to write update VBS: %v\n", err)
+		os.Exit(1)
 	}
+	logInfo(configDir, "launcher", fmt.Sprintf("wrote update VBS: %s", vbsPath))
 
-	var c *exec.Cmd
-	if npmCliPath != "" {
-		// Preferred: node npm-cli.js install -g <pkg> — no cmd.exe, no console popups.
-		nodeArgs := append([]string{npmCliPath}, cmd[1:]...) // drop "npm", keep "install -g <pkg>"
-		c = exec.Command(nodePath, nodeArgs...)
-		logInfo(configDir, "launcher", fmt.Sprintf("using node+npm-cli.js: %s %v", nodePath, nodeArgs))
-	} else {
-		// Fallback: PowerShell with hidden window — safer than cmd.exe for batch files.
-		psCmd := ""
-		for i, a := range cmd {
-			if i > 0 {
-				psCmd += " "
-			}
-			psCmd += a
-		}
-		c = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", psCmd)
-		logInfo(configDir, "launcher", fmt.Sprintf("fallback: powershell -Command %s", psCmd))
-	}
-
+	c := exec.Command("wscript.exe", "//nologo", vbsPath)
 	c.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,
 		CreationFlags: 0x08000000 | 0x00000008, // CREATE_NO_WINDOW | DETACHED_PROCESS
 	}
 	if err := c.Start(); err != nil {
-		logError(configDir, "launcher", fmt.Sprintf("failed to spawn update command: %v", err))
-		fmt.Fprintf(os.Stderr, "Error: failed to spawn update command: %v\n", err)
+		logError(configDir, "launcher", fmt.Sprintf("failed to spawn wscript: %v", err))
+		fmt.Fprintf(os.Stderr, "Error: failed to spawn wscript: %v\n", err)
 		os.Exit(1)
 	}
 	os.Exit(0)
+}
+
+// writeUpdateVbs writes a VBScript that runs the update command with SW_HIDE.
+// All child processes spawned by WshShell.Run with nWindowStyle=0 are hidden.
+func writeUpdateVbs(vbsPath string, cmd []string) error {
+	// Find node.exe + npm-cli.js (preferred over npm.cmd to avoid batch file issues).
+	nodePath, _ := exec.LookPath("node")
+	npmCli := ""
+	if nodePath != "" {
+		candidate := filepath.Join(filepath.Dir(nodePath), "node_modules", "npm", "bin", "npm-cli.js")
+		if _, err := os.Stat(candidate); err == nil {
+			npmCli = candidate
+		}
+	}
+
+	var vbsCmd string
+	if nodePath != "" && npmCli != "" {
+		// node npm-cli.js install -g <pkg>  (cmd[0]="npm" is replaced by node+npmCli)
+		parts := []string{quoteVbs(nodePath), quoteVbs(npmCli)}
+		parts = append(parts, quoteVbsSlice(cmd[1:])...)
+		vbsCmd = strings.Join(parts, " ")
+	} else {
+		// Fallback: npm.cmd via cmd.exe
+		parts := []string{`cmd.exe`, `/C`, `npm`}
+		parts = append(parts, cmd[1:]...)
+		vbsCmd = strings.Join(quoteVbsSlice(parts), " ")
+	}
+
+	// VBScript: WshShell.Run cmd, 0=SW_HIDE, False=don't wait
+	vbs := fmt.Sprintf(`Dim oShell
+Set oShell = CreateObject("WScript.Shell")
+oShell.Run "%s", 0, False
+`, strings.ReplaceAll(vbsCmd, `"`, `""`))
+
+	return os.WriteFile(vbsPath, []byte(vbs), 0o600)
+}
+
+func quoteVbs(s string) string {
+	return `"` + strings.ReplaceAll(s, `\`, `\\`) + `"`
+}
+
+func quoteVbsSlice(args []string) []string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		out[i] = quoteVbs(a)
+	}
+	return out
 }
