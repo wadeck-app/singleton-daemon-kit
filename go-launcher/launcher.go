@@ -79,7 +79,7 @@ type Config struct {
 }
 
 // validateUpdateCmd checks that UpdateCmd is a safe npm install command.
-// Allowed: exactly ["npm", "install", "-g", "@wadeck/<pkg>[@<version>]"].
+// Allowed: exactly ["npm", "install", "-g", "@wadeck/<pkg>[@<version>]"] or "@wadeck-app/<pkg>".
 // Any other form is rejected to prevent launcher.config.json being used as a
 // code-execution vector.
 func validateUpdateCmd(cmd []string) error {
@@ -88,14 +88,14 @@ func validateUpdateCmd(cmd []string) error {
 		return nil
 	}
 	if len(cmd) != 4 {
-		return fmt.Errorf("updateCmd: expected exactly 4 args [npm install -g @wadeck/<pkg>], got %d", len(cmd))
+		return fmt.Errorf("updateCmd: expected exactly 4 args [npm install -g @wadeck-app/<pkg>], got %d", len(cmd))
 	}
 	if cmd[0] != "npm" || cmd[1] != "install" || cmd[2] != "-g" {
-		return fmt.Errorf("updateCmd: only 'npm install -g @wadeck/<pkg>' is allowed, got %v", cmd)
+		return fmt.Errorf("updateCmd: only 'npm install -g @wadeck-app/<pkg>' is allowed, got %v", cmd)
 	}
 	pkg := cmd[3]
-	if !strings.HasPrefix(pkg, "@wadeck/") {
-		return fmt.Errorf("updateCmd: package must start with @wadeck/, got %q", pkg)
+	if !strings.HasPrefix(pkg, "@wadeck/") && !strings.HasPrefix(pkg, "@wadeck-app/") {
+		return fmt.Errorf("updateCmd: package must start with @wadeck/ or @wadeck-app/, got %q", pkg)
 	}
 	return nil
 }
