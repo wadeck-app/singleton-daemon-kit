@@ -6,28 +6,36 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+
+	"golang.org/x/sys/windows"
 )
 
-// hasConsole reports whether the launcher is running in an interactive terminal.
+// hasConsole reports whether the launcher has a usable stdout handle (pipe or
+// character device). Used to decide whether to forward real stdio to node or
+// open NUL handles. Note: a SUBSYSTEM:WINDOWS process can never have an
+// attached console — GetConsoleMode always fails — but it may have valid piped
+// stdio handles inherited from the caller.
 func hasConsole() bool {
 	var consoleMode uint32
-	return syscall.GetConsoleMode(syscall.Handle(os.Stdout.Fd()), &consoleMode) == nil
+	if syscall.GetConsoleMode(syscall.Handle(os.Stdout.Fd()), &consoleMode) == nil {
+		return true
+	}
+	ft, _ := windows.GetFileType(windows.Handle(os.Stdout.Fd()))
+	return ft != 0
 }
 
 func setCmdFlags(cmd *exec.Cmd) {
-	// CREATE_NO_WINDOW prevents a console popup when the launcher is started
-	// without a terminal (e.g. from a desktop shortcut or Task Scheduler).
-	// When the launcher itself is already running inside a console (stdout is
-	// a console screen buffer), CREATE_NO_WINDOW would break child process
-	// stdout: node.exe uses WriteConsoleW, which silently fails when the
-	// process has no attached console even if the handle is valid.
-	// Solution: only set CREATE_NO_WINDOW when the launcher has no console.
-	var creationFlags uint32
-	if !hasConsole() {
-		creationFlags = 0x08000000 // CREATE_NO_WINDOW
-	}
-
+	// This binary is compiled as SUBSYSTEM:WINDOWS (GUI). A GUI process NEVER
+	// has an attached console, so GetConsoleMode always fails regardless of the
+	// inherited stdio handles. Spawning a SUBSYSTEM:CONSOLE process (node.exe)
+	// from a GUI parent without CREATE_NO_WINDOW causes Windows to allocate a
+	// new visible console window for the child — the terminal flash the user sees.
+	//
+	// With CREATE_NO_WINDOW, the child inherits the pipe/file handles normally
+	// (WriteFile still works on any valid HANDLE), so output still flows back to
+	// the caller via the piped stdio. WriteConsoleW is never needed because there
+	// is no attached console in a SUBSYSTEM:WINDOWS process tree.
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: creationFlags,
+		CreationFlags: 0x08000000, // CREATE_NO_WINDOW
 	}
 }
