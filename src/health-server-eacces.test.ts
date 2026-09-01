@@ -6,10 +6,10 @@
  * Isolated in its own file so vi.mock('http') does not affect other test files.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import * as os from 'os';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as crypto from 'crypto';
+import * as os from 'node:os';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import * as crypto from 'node:crypto';
 import type { CommandMap } from './types.js';
 
 // ---------------------------------------------------------------------------

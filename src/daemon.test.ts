@@ -4,11 +4,11 @@ import { createDaemonClient } from './client.js';
 import { createDaemon } from './daemon.js';
 import * as portFileModule from './port-file.js';
 import { type CommandMap, type DaemonHandle } from './types.js';
-import * as fs from 'fs/promises';
-import * as net from 'net';
-import * as os from 'os';
-import * as path from 'path';
-import * as crypto from 'crypto';
+import * as fs from 'node:fs/promises';
+import * as net from 'node:net';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import * as crypto from 'node:crypto';
 
 const { writePortFile, readPortFile } = portFileModule;
 
@@ -137,7 +137,7 @@ describe('daemon', () => {
       versionExtra: () => ({ machine_id: 'test-machine', custom_field: 42 }),
     });
     const res = await fetch(`http://127.0.0.1:${daemon.port}/version`);
-    const body = await res.json() as Record<string, unknown>;
+    const body: Record<string, unknown> = await res.json();
     expect(body['machine_id']).toBe('test-machine');
     expect(body['custom_field']).toBe(42);
   });
@@ -155,7 +155,7 @@ describe('daemon', () => {
       }),
     });
     const res = await fetch(`http://127.0.0.1:${daemon.port}/version`);
-    const body = await res.json() as Record<string, unknown>;
+    const body: Record<string, unknown> = await res.json();
     expect(body['pid']).toBe(process.pid);
     expect(body['sdkVersion']).toBe(1);
     expect(body['version']).not.toBe('fake');
@@ -168,7 +168,7 @@ describe('daemon', () => {
     const commands = {} as CommandMap;
     await using daemon = await createTestDaemon({ commands });
     const res = await fetch(`http://127.0.0.1:${daemon.port}/version`);
-    const body = await res.json() as Record<string, unknown>;
+    const body: Record<string, unknown> = await res.json();
     expect(body['config_dir']).toBe(daemon.configDir);
     expect(body['configDir']).toBeUndefined();
   });
@@ -189,7 +189,7 @@ describe('daemon', () => {
       appVersion: '2026.07.15-test',
     });
     const res = await fetch(`http://127.0.0.1:${daemon.port}/version`);
-    const body = await res.json() as Record<string, unknown>;
+    const body: Record<string, unknown> = await res.json();
     expect(body['version']).toBe('2026.07.15-test');
   });
 
@@ -197,7 +197,7 @@ describe('daemon', () => {
     const commands = {} as CommandMap;
     await using daemon = await createTestDaemon({ commands });
     const res = await fetch(`http://127.0.0.1:${daemon.port}/version`);
-    const body = await res.json() as Record<string, unknown>;
+    const body: Record<string, unknown> = await res.json();
     // Without appVersion, falls back to SDK PACKAGE_VERSION '1.0.0'
     expect(body['version']).toBe('1.0.0');
   });
@@ -428,7 +428,7 @@ describe('daemon - server.address() null-safe port', () => {
 
     const res = await fetch(`http://127.0.0.1:${daemon.port}/version`);
     expect(res.ok).toBe(true);
-    const body = await res.json() as Record<string, unknown>;
+    const body: Record<string, unknown> = await res.json();
     // port must be a positive integer matching the daemon's actual port
     expect(typeof body['port']).toBe('number');
     expect(body['port']).toBeGreaterThan(0);

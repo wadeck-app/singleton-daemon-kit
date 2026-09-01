@@ -1,10 +1,15 @@
-import * as http from 'http';
-import * as net from 'net';
-import * as crypto from 'crypto';
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import * as http from 'node:http';
+import * as net from 'node:net';
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { DaemonPortExhaustedError, type CommandMap, type DaemonHooks, type HealthStatus } from './types.js';
 import { SDK_VERSION } from './constants.js';
+
+function getErrorMessage(e: unknown): string {
+  // violations-suppress: ts/no-err-message-direct helper implementation — this IS the safe accessor
+  return e instanceof Error ? e.message : String(e);
+}
 const PACKAGE_VERSION = '1.0.0';
 
 async function tryListen(server: http.Server, port: number): Promise<number> {
@@ -137,7 +142,7 @@ export async function startHealthServer<T extends CommandMap>(
         const error = err instanceof Error ? err : new Error(String(err));
         hooks?.onCommandError?.('health', error);
         if (!res.headersSent) {
-          sendJson(res, 500, { error: `Health check failed: ${error.message}` });
+          sendJson(res, 500, { error: `Health check failed: ${getErrorMessage(error)}` });
         }
       }
       return;
@@ -187,7 +192,7 @@ export async function startHealthServer<T extends CommandMap>(
         const error = err instanceof Error ? err : new Error(String(err));
         hooks?.onCommandError?.(commandName, error);
         if (!res.headersSent) {
-          sendJson(res, 500, { error: `Command failed: ${error.message}` });
+          sendJson(res, 500, { error: `Command failed: ${getErrorMessage(error)}` });
         }
       }
       return;

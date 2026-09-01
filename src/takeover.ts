@@ -1,9 +1,9 @@
-import * as http from 'http';
-import * as net from 'net';
+import * as http from 'node:http';
+import * as net from 'node:net';
 import { readPortFile, deletePortFile, isFresh } from './port-file.js';
 import { DaemonTakeoverError, type DaemonHooks } from './types.js';
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { isProcessAlive } from './process-utils.js';
 
 async function pollUntilDead(pid: number, timeoutMs: number): Promise<boolean> {

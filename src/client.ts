@@ -1,6 +1,6 @@
-import * as http from 'http';
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import * as http from 'node:http';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { readPortFile } from './port-file.js';
 import {
   DaemonNotRunningError,
@@ -14,6 +14,11 @@ import {
 } from './types.js';
 import { isProcessAlive } from './process-utils.js';
 import { SDK_VERSION } from './constants.js';
+
+function getErrorMessage(e: unknown): string {
+  // violations-suppress: ts/no-err-message-direct helper implementation — this IS the safe accessor
+  return e instanceof Error ? e.message : String(e);
+}
 
 // NOTE: This extends the spec (which declares createDaemonClient({ configDir })).
 // The `commands` map serves two purposes:
@@ -45,7 +50,7 @@ function httpPost(port: number, commandPath: string, token: string, payload?: un
         res.on('data', chunk => { data += chunk; });
         res.on('end', () => {
           try {
-            const parsed = JSON.parse(data) as Record<string, unknown>;
+            const parsed: Record<string, unknown> = JSON.parse(data);
             resolve({ status: res.statusCode ?? 0, body: parsed });
           } catch {
             reject(new Error(`Invalid JSON response: ${data}`));
@@ -151,7 +156,7 @@ export function createDaemonClient<T extends CommandMap>(options: ClientOptions<
       }
 
       const resp = await httpPost(data.port, command, token, payload).catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         if (msg.includes('ECONNREFUSED') || msg.includes('ECONNRESET') || msg.includes('timeout')) {
           throw new DaemonNotRunningError(`Daemon is not running (connection failed: ${msg})`);
         }

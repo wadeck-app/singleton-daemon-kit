@@ -69,10 +69,10 @@ vi.mock('fs/promises', async (importActual) => {
 
 import { takeoverIfRunning } from './takeover.js';
 import { writePortFile, readPortFile, deletePortFile, isFresh } from './port-file.js';
-import * as fsPromises from 'fs/promises';
-import * as os from 'os';
-import * as path from 'path';
-import * as crypto from 'crypto';
+import * as fsPromises from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import * as crypto from 'node:crypto';
 
 const mockReadPortFile = vi.mocked(readPortFile);
 const mockDeletePortFile = vi.mocked(deletePortFile);
@@ -429,9 +429,9 @@ describe('takeover', () => {
     // Write child script to a temp file (avoids issues with -e and argv on Windows)
     const scriptPath = path.join(tmpDir, 'child-daemon.cjs');
     await fsPromises.writeFile(scriptPath, `
-      const http = require('http');
-      const fs = require('fs');
-      const path = require('path');
+      const http = require('node:http');
+      const fs = require('node:fs');
+      const path = require('node:path');
       const configDir = process.argv[2];
       const server = http.createServer((req, res) => {
         if (req.method === 'POST' && req.url === '/quit') {

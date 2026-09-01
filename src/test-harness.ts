@@ -1,7 +1,7 @@
-import * as os from 'os';
-import * as crypto from 'crypto';
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import * as os from 'node:os';
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { createDaemon } from './daemon.js';
 import { createDaemonClient } from './client.js';
 import {
