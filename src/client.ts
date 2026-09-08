@@ -14,6 +14,7 @@ import {
 } from './types.js';
 import { isProcessAlive } from './process-utils.js';
 import { SDK_VERSION } from './constants.js';
+import { httpGet, isHttpReachable } from './http-utils.js';
 
 function getErrorMessage(e: unknown): string {
   // violations-suppress: ts/no-err-message-direct helper implementation — this IS the safe accessor
@@ -63,42 +64,6 @@ function httpPost(port: number, commandPath: string, token: string, payload?: un
     });
     req.on('error', reject);
     if (body) req.write(body);
-    req.end();
-  });
-}
-
-// On MSYS2/Git Bash, process.kill(pid, 0) returns ESRCH for Windows processes started via
-// VBScript (SW_HIDE), even when the daemon is alive. This async fallback probes the HTTP
-// endpoint directly so PID check false-positives don't kill live connections.
-async function isHttpReachable(port: number): Promise<boolean> {
-  try {
-    const resp = await httpGet(port, '/version');
-    return resp.status === 200;
-  } catch {
-    return false;
-  }
-}
-
-function httpGet(port: number, urlPath: string): Promise<{ status: number; body: Record<string, unknown> }> {
-  return new Promise((resolve, reject) => {
-    const req = http.request(
-      { hostname: '127.0.0.1', port, method: 'GET', path: urlPath },
-      (res) => {
-        let data = '';
-        res.on('data', chunk => { data += chunk; });
-        res.on('end', () => {
-          try {
-            resolve({ status: res.statusCode ?? 0, body: JSON.parse(data) as Record<string, unknown> });
-          } catch {
-            reject(new Error(`Invalid JSON response: ${data}`));
-          }
-        });
-      }
-    );
-    req.setTimeout(5000, () => {
-      req.destroy(new Error('HTTP timeout after 5s'));
-    });
-    req.on('error', reject);
     req.end();
   });
 }

@@ -15,6 +15,29 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import * as net from 'node:net';
+import { isProcessAlive } from './process-utils.js';
+
+// Mock process-utils so T-MSYS2 tests can simulate MSYS2 PID false-negatives.
+// The factory defaults to the real implementation so all existing tests are unaffected.
+vi.mock('./process-utils.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./process-utils.js')>();
+  return { isProcessAlive: vi.fn(actual.isProcessAlive) };
+});
+
+/** Restores isProcessAlive to the real process.kill-based implementation. */
+function restoreRealIsProcessAlive(): void {
+  vi.mocked(isProcessAlive).mockImplementation((pid: number): boolean => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (e) {
+      const err = e as NodeJS.ErrnoException;
+      if (err.code === 'ESRCH') return false;
+      if (err.code === 'EPERM') return true;
+      return false;
+    }
+  });
+}
 
 let tmpDir: string;
 
@@ -24,6 +47,8 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  // Always restore real implementation so T-MSYS2 overrides do not bleed into other tests.
+  restoreRealIsProcessAlive();
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
@@ -225,4 +250,61 @@ describe('client', () => {
     const err = await client.send('ping').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(DaemonNotRunningError);
   }, 10000);
+});
+
+// T-MSYS2: HTTP fallback when process.kill(pid, 0) returns ESRCH for VBScript-started daemons.
+// On MSYS2/Git Bash, isProcessAlive() can return false even for live Windows processes.
+// The fix probes GET /version as a secondary liveness check before declaring the daemon dead.
+describe('T-MSYS2: HTTP fallback when PID check fails', () => {
+  // T-MSYS2-1: send() must succeed when isProcessAlive lies but the daemon responds over HTTP.
+  it('T-MSYS2-1: send() succeeds when isProcessAlive returns false but HTTP works', async () => {
+    vi.mocked(isProcessAlive).mockReturnValue(false);
+    const commands = { ping: () => 'pong' } as unknown as CommandMap;
+    // createTestDaemon starts a real daemon; our mock doesn't affect it because the startup
+    // path only calls isProcessAlive when a stale lock/port file already exists.
+    await using daemon = await createTestDaemon({ commands });
+    const client = createDaemonClient({ configDir: daemon.configDir, commands });
+    // isProcessAlive → false, isHttpReachable → true → daemon treated as alive → send succeeds
+    await expect(client.send('ping')).resolves.toBe('pong');
+  });
+
+  // T-MSYS2-2: send() must throw when both PID check and HTTP reachability fail.
+  it('T-MSYS2-2: send() throws DaemonNotRunningError when both PID check AND HTTP fail', async () => {
+    vi.mocked(isProcessAlive).mockReturnValue(false);
+    // Acquire a free port by binding then immediately releasing it.
+    const blocker = net.createServer();
+    await new Promise<void>((resolve) => blocker.listen(0, '127.0.0.1', resolve));
+    const freePort = (blocker.address() as net.AddressInfo).port;
+    await new Promise<void>((resolve) => blocker.close(() => resolve()));
+
+    await writePortFile(tmpDir, freePort, 99999);
+    const client = createDaemonClient({ configDir: tmpDir, commands: {} as CommandMap });
+    // isProcessAlive → false, isHttpReachable → false (nothing listening) → DaemonNotRunningError
+    await expect(client.send('foo')).rejects.toThrow(DaemonNotRunningError);
+  });
+
+  // T-MSYS2-3: isRunning() must return true when PID check fails but HTTP responds.
+  it('T-MSYS2-3: isRunning() returns true when PID check fails but HTTP responds', async () => {
+    vi.mocked(isProcessAlive).mockReturnValue(false);
+    const commands = { ping: () => 'pong' } as unknown as CommandMap;
+    await using daemon = await createTestDaemon({ commands });
+    const client = createDaemonClient({ configDir: daemon.configDir, commands: {} as CommandMap });
+    // isProcessAlive → false, isHttpReachable → true → isRunning() returns true
+    expect(await client.isRunning()).toBe(true);
+  });
+
+  // T-MSYS2-4: isRunning() must return false when both checks fail.
+  it('T-MSYS2-4: isRunning() returns false when both PID check and HTTP fail', async () => {
+    vi.mocked(isProcessAlive).mockReturnValue(false);
+    // Same free-port trick as T-MSYS2-2
+    const blocker = net.createServer();
+    await new Promise<void>((resolve) => blocker.listen(0, '127.0.0.1', resolve));
+    const freePort = (blocker.address() as net.AddressInfo).port;
+    await new Promise<void>((resolve) => blocker.close(() => resolve()));
+
+    await writePortFile(tmpDir, freePort, 99999);
+    const client = createDaemonClient({ configDir: tmpDir, commands: {} as CommandMap });
+    // isProcessAlive → false, isHttpReachable → false (nothing listening) → false
+    expect(await client.isRunning()).toBe(false);
+  });
 });

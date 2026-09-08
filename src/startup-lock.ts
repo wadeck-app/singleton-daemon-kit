@@ -2,6 +2,8 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { DaemonTakeoverError } from './types.js';
 import { isProcessAlive } from './process-utils.js';
+import { isHttpReachable } from './http-utils.js';
+import { readPortFile } from './port-file.js';
 
 const LOCK_RETRY_INTERVAL_MS = 100;
 const LOCK_TIMEOUT_MS = 10_000;
@@ -53,7 +55,16 @@ export async function acquireStartupLock(configDir: string, timeoutMs?: number):
       try {
         const content = await fs.readFile(lockPath, 'utf8');
         const { pid } = JSON.parse(content) as LockData;
-        if (!isProcessAlive(pid)) {
+        // On MSYS2/Git Bash, isProcessAlive() may return false for VBScript-started processes
+        // even when they are alive. Before clearing the lock, check HTTP reachability via the
+        // port file as a fallback so a running daemon's lock is never incorrectly evicted.
+        const pidAlive = isProcessAlive(pid);
+        let httpAlive = false;
+        if (!pidAlive) {
+          const portData = await readPortFile(configDir).catch(() => null);
+          httpAlive = portData ? await isHttpReachable(portData.port) : false;
+        }
+        if (!pidAlive && !httpAlive) {
           // TOCTOU note: between isProcessAlive(pid) returning false and unlink(), another
           // process may have written a fresh valid lock. The unlink removes it, but the
           // subsequent O_EXCL open then races cleanly — only one caller gets EEXIST.
