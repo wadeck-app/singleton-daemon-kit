@@ -67,6 +67,18 @@ function httpPost(port: number, commandPath: string, token: string, payload?: un
   });
 }
 
+// On MSYS2/Git Bash, process.kill(pid, 0) returns ESRCH for Windows processes started via
+// VBScript (SW_HIDE), even when the daemon is alive. This async fallback probes the HTTP
+// endpoint directly so PID check false-positives don't kill live connections.
+async function isHttpReachable(port: number): Promise<boolean> {
+  try {
+    const resp = await httpGet(port, '/version');
+    return resp.status === 200;
+  } catch {
+    return false;
+  }
+}
+
 function httpGet(port: number, urlPath: string): Promise<{ status: number; body: Record<string, unknown> }> {
   return new Promise((resolve, reject) => {
     const req = http.request(
@@ -99,7 +111,9 @@ export function createDaemonClient<T extends CommandMap>(options: ClientOptions<
       try {
         const data = await readPortFile(configDir);
         if (!data) return false;
-        return isProcessAlive(data.pid);
+        if (isProcessAlive(data.pid)) return true;
+        // PID check failed — may be MSYS2 false-positive for VBScript-started processes
+        return isHttpReachable(data.port);
       } catch {
         return false;
       }
@@ -109,7 +123,7 @@ export function createDaemonClient<T extends CommandMap>(options: ClientOptions<
       const data = await readPortFile(configDir);
       if (!data) throw new DaemonNotRunningError(`Daemon is not running (no port file found in ${configDir})`);
       // Mirror send()'s alive check — a stale port file otherwise causes raw ECONNREFUSED.
-      if (!isProcessAlive(data.pid)) {
+      if (!isProcessAlive(data.pid) && !(await isHttpReachable(data.port))) {
         throw new DaemonNotRunningError(`Daemon is not running (process ${data.pid} is not alive)`);
       }
       const resp = await httpGet(data.port, '/version');
@@ -120,7 +134,10 @@ export function createDaemonClient<T extends CommandMap>(options: ClientOptions<
       const data = await readPortFile(configDir);
       const localHandler = (options.commands as Record<string, ((...args: unknown[]) => unknown) | undefined>)[command as string];
 
-      if (!data || !isProcessAlive(data.pid)) {
+      const pidAlive = data ? isProcessAlive(data.pid) : false;
+      // When PID check fails, probe HTTP before concluding dead (MSYS2 ESRCH false-positive)
+      const daemonAlive = pidAlive || (data ? await isHttpReachable(data.port) : false);
+      if (!data || !daemonAlive) {
         if (localHandler) {
           return localHandler(payload) as Promise<CommandResult<T, K>>;
         }
