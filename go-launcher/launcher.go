@@ -42,7 +42,9 @@ type Config struct {
 	// (where config.port and health_token live, e.g. ~/.config/myapp).
 	ConfigDir string
 
-	// NodeScript is the absolute path to the .cjs bundle to spawn in daemon mode.
+	// NodeScript identifies the .cjs bundle to spawn in daemon mode. It may be an absolute
+	// path, a path relative to the launcher binary, or an npm package specifier such as
+	// "@scope/pkg/dist/app.cjs". Resolution is handled by ResolveNodeScript.
 	NodeScript string
 
 	// CLIFlags lists the flags that trigger HTTP dispatch instead of daemon spawn.
@@ -297,11 +299,14 @@ func runDaemon(cfg Config, args []string) {
 		os.Exit(1)
 	}
 
-	// Allow the npm shim to override the bundle path when launcher and bundle
-	// are in different npm packages (exe-in-npm distribution pattern).
-	if override := os.Getenv("LAUNCHER_BUNDLE_OVERRIDE"); override != "" {
-		cfg.NodeScript = override
+	// Resolve the bundle: env override, an existing path as given, next to the launcher, or an
+	// npm package specifier walked up through node_modules. See ResolveNodeScript.
+	resolvedScript, scriptErr := ResolveNodeScript(cfg.NodeScript)
+	if scriptErr != nil {
+		logError(cfg.ConfigDir, "launcher", scriptErr.Error())
+		os.Exit(1)
 	}
+	cfg.NodeScript = resolvedScript
 
 	scriptArgs := append([]string{cfg.NodeScript}, args...)
 	cmd := exec.Command(nodePath, scriptArgs...)

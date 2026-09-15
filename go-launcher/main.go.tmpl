@@ -5,7 +5,6 @@ package main
 
 import (
 	"os"
-	"path/filepath"
 
 	launcher "wadeck.ch/singleton-daemon-kit/go-launcher"
 )
@@ -18,21 +17,17 @@ import (
 // main.go.tmpl and pass it as the third argument to build.sh:
 //   bash build.sh launcher.config.json dist/ /path/to/custom/main.go.tmpl
 func main() {
-	exe, _ := os.Executable()
-	// Resolve symlinks so exeDir points to the real binary directory, not the symlink's directory.
-	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = resolved
-	}
-	exeDir := filepath.Dir(exe)
-
 	// ResolveConfigDir handles --config <dir>, $XDG_CONFIG_HOME, and legacy migration.
 	// It returns the filtered args with "--config <dir>" removed so node does not see it.
 	configDir, args := launcher.ResolveConfigDir("{{.DefaultConfigDir}}", os.Args[1:])
 
 	launcher.Run(launcher.Config{
-		ConfigDir:  configDir,
-		Args:       args,
-		NodeScript: filepath.Join(exeDir, "{{.NodeScript}}"),
+		ConfigDir: configDir,
+		Args:      args,
+		// Passed through unresolved: the SDK handles the env override, a path next to the
+		// launcher, and npm package specifiers. Joining it to the exe directory here would
+		// destroy a specifier and tie the launcher to one npm layout.
+		NodeScript: "{{.NodeScript}}",
 		AppName:    "{{.AppName}}",
 		CLIFlags: []string{
 {{range .CLIFlags}}			"{{.}}",
