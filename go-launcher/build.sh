@@ -96,11 +96,17 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 # --- Generate a temporary directory for the build ---
-TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT
+# Deliberately NOT named TMPDIR. macOS exports TMPDIR by default, so assigning to it here
+# replaced the exported value, and `go` then saw os.TempDir() pointing at this very directory.
+# Go ignores a go.mod found in the system temp root on purpose, so the build failed with
+# "ignoring go.mod in system temp root" followed by "go.mod file not found". Linux does not
+# usually export TMPDIR, so the assignment stayed shell-local and the bug never showed there:
+# the launcher was simply never buildable on macOS.
+BUILD_DIR=$(mktemp -d)
+trap 'rm -rf "$BUILD_DIR"' EXIT
 
 # --- Generate main.go from template using node ---
-node - "$TEMPLATE_FILE" "$APP_NAME" "$NODE_SCRIPT" "$DEFAULT_CONFIG_DIR" "$CLI_FLAGS_JSON" "$SILENT_FLAGS_JSON" "$UPDATE_CMD_JSON" "$TMPDIR" <<'EOF'
+node - "$TEMPLATE_FILE" "$APP_NAME" "$NODE_SCRIPT" "$DEFAULT_CONFIG_DIR" "$CLI_FLAGS_JSON" "$SILENT_FLAGS_JSON" "$UPDATE_CMD_JSON" "$BUILD_DIR" <<'EOF'
 const fs = require('fs');
 const path = require('path');
 
@@ -128,20 +134,20 @@ fs.writeFileSync(path.join(outDir, 'main.go'), tmpl, 'utf8');
 EOF
 
 # Copy go.mod and go.sum into the temp dir so `go build` resolves the module
-cp "$SCRIPT_DIR/go.mod" "$TMPDIR/go.mod"
-cp "$SCRIPT_DIR/go.sum" "$TMPDIR/go.sum"
+cp "$SCRIPT_DIR/go.mod" "$BUILD_DIR/go.mod"
+cp "$SCRIPT_DIR/go.sum" "$BUILD_DIR/go.sum"
 
 # Symlink (or copy) the go-launcher package sources into the temp module so the
 # replace directive isn't needed — instead, we copy the generated main.go into a
 # sub-package structure that imports the library from the module cache.
-# Simpler approach: use a replace directive in a fresh go.mod inside TMPDIR.
+# Simpler approach: use a replace directive in a fresh go.mod inside BUILD_DIR.
 
 # Rewrite go.mod to add a replace directive pointing at the library source
 GO_VERSION=$(grep '^go ' "$SCRIPT_DIR/go.mod" | awk '{print $2}')
 TOOLCHAIN_LINE=$(grep '^toolchain ' "$SCRIPT_DIR/go.mod" || true)
 REQUIRE_LINES=$(grep '^require' "$SCRIPT_DIR/go.mod" -A 100 | tail -n +1)
 
-node - "$TMPDIR/go.mod" "$SCRIPT_DIR" "$GO_VERSION" "$TOOLCHAIN_LINE" <<'EOF'
+node - "$BUILD_DIR/go.mod" "$SCRIPT_DIR" "$GO_VERSION" "$TOOLCHAIN_LINE" <<'EOF'
 const fs = require('fs');
 const [gomodPath, launcherDir, goVersion, toolchainLine] = process.argv.slice(2);
 
@@ -162,7 +168,7 @@ fs.writeFileSync(gomodPath, content, 'utf8');
 EOF
 
 # Copy go.sum (the library's sum file covers all deps)
-cp "$SCRIPT_DIR/go.sum" "$TMPDIR/go.sum"
+cp "$SCRIPT_DIR/go.sum" "$BUILD_DIR/go.sum"
 
 # Embed Windows version info (FileDescription, ProductName, etc.) via goversioninfo.
 # resource.syso is picked up automatically by `go build` for GOOS=windows.
@@ -171,10 +177,10 @@ VERSIONINFO_SRC="$SCRIPT_DIR/versioninfo.json"
 if [[ -f "$VERSIONINFO_SRC" ]]; then
   sed -e "s/{{APP_NAME}}/${APP_NAME}/g" \
       -e "s/{{DISPLAY_NAME}}/${DISPLAY_NAME}/g" \
-      "$VERSIONINFO_SRC" > "$TMPDIR/versioninfo.json"
+      "$VERSIONINFO_SRC" > "$BUILD_DIR/versioninfo.json"
   if command -v goversioninfo &>/dev/null; then
     echo "Generating Windows resource file (resource.syso)..."
-    if (cd "$TMPDIR" && goversioninfo -o resource.syso versioninfo.json); then
+    if (cd "$BUILD_DIR" && goversioninfo -o resource.syso versioninfo.json); then
       echo "  resource.syso generated"
     else
       echo "  goversioninfo failed (non-fatal, skipping)"
@@ -184,7 +190,7 @@ if [[ -f "$VERSIONINFO_SRC" ]]; then
   fi
 fi
 
-echo "Generated main.go at $TMPDIR/main.go"
+echo "Generated main.go at $BUILD_DIR/main.go"
 echo "Building 3 targets for $APP_NAME..."
 
 # --- Build targets ---
@@ -200,7 +206,7 @@ build_target() {
   fi
 
   echo "  Building $goos/$goarch -> $output"
-  if ! (cd "$TMPDIR" && GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build \
+  if ! (cd "$BUILD_DIR" && GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build \
     -trimpath \
     -ldflags "$ldflags" \
     -o "$output" .); then
