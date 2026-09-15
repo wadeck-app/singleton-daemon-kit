@@ -55,14 +55,13 @@ import (
 )
 
 func main() {
-    exe, _ := os.Executable()
-    exeDir := filepath.Dir(exe)
-
     configDir := launcher.ResolveConfigDir(os.Args[1:], launcher.DefaultConfigDir("myapp"))
 
     launcher.Run(launcher.Config{
-        ConfigDir:  configDir,
-        NodeScript: filepath.Join(exeDir, "myapp.cjs"),
+        ConfigDir: configDir,
+        // Passed through unresolved: the SDK handles it. Joining to the exe directory here
+        // would destroy a package specifier and tie the launcher to one npm layout.
+        NodeScript: "myapp.cjs",
         AppName:    "myapp",   // used in error messages: "myapp daemon is not running"
         CLIFlags: []string{
             "--quit", "--restart", "--sync-now",
@@ -85,6 +84,23 @@ For consumers that ship binaries, use the provided `build.sh` + `launcher.config
 }
 ```
 
+### How `nodeScript` is resolved
+
+`ResolveNodeScript` tries, in order:
+
+| # | Candidate | For |
+|---|---|---|
+| 1 | `LAUNCHER_BUNDLE_OVERRIDE` | a shim that already knows the absolute path; rejected loudly if it is not a file |
+| 2 | the value as given, if it is an existing file | an absolute path, or a consumer on an older template that pre-joined it |
+| 3 | relative to the launcher binary | the bundle shipped beside the exe (`"myapp.cjs"`) |
+| 4 | as an npm package specifier, walking up node_modules | the bundle in a sibling package (`"@scope/app/dist/app.cjs"`) |
+
+Step 4 exists because a bare launch cannot inject an environment variable: a Windows
+`HKCU\...\Run` value is a plain command line, and a launchd plist only carries one if the
+consumer added it. A fixed relative path between two npm packages is not something to rely
+on either, since npm decides whether to hoist the platform package or nest it. Set
+`nodeScript` to a specifier and stop caring.
+
 ```bash
 bash go-launcher/build.sh launcher.config.json dist/
 # Outputs: dist/myapp_windows_release.exe, dist/myapp_darwin_arm64_release, dist/myapp_darwin_amd64_release
@@ -100,7 +116,7 @@ bash go-launcher/build.sh launcher.config.json dist/
 
 | Variable | Description |
 |---|---|
-| `LAUNCHER_BUNDLE_OVERRIDE` | When set, overrides `Config.NodeScript` with the given absolute path. Intended for the npm-distribution pattern where the launcher binary lives in one npm package (e.g. `@scope/app-win32-x64`) and the `.cjs` bundle lives in another (`@scope/app`). The JS shim sets this to `require.resolve('@scope/app/app.cjs')` before exec-ing the launcher. |
+| `LAUNCHER_BUNDLE_OVERRIDE` | Absolute path to the bundle, winning over `Config.NodeScript`. Rejected with an error if it does not point at a file. Use it when the caller already resolved the path; for the split-package layout prefer a package specifier in `nodeScript`, which also works on a bare launch where no environment variable can be injected. |
 
 ## Logging
 
@@ -111,16 +127,19 @@ Never add a parallel `fmt.Fprintln(os.Stderr, …)` alongside a `logInfo`/`logWa
 
 ## Updating consumers after a SDK release
 
-The SDK publishes to the GitLab npm registry. After pushing to `main` and waiting for CI:
+The SDK publishes to GitHub Packages under `@wadeck-app`. After pushing to `main` and waiting
+for CI:
 
 ```bash
-# 1. Check the latest published version
-npm view @wadeck/singleton-daemon-kit version \
-  --registry https://gitlab.com/api/v4/projects/84445653/packages/npm/
+# 1. Check the latest published version (calver: YYYY.M.D-BUILD-sha)
+npm view @wadeck-app/singleton-daemon-kit version
 
 # 2. Install in each consumer
-npm install --prefix <consumer-dir> @wadeck/singleton-daemon-kit@<version>
+npm install --prefix <consumer-dir> @wadeck-app/singleton-daemon-kit@<version>
 ```
+
+The old `@wadeck` scope on GitLab is dead. Following it installs a package frozen in
+2026-08: that is how wdrive spent two weeks running stale launcher binaries.
 
 Update this list when adding a new consumer.
 
