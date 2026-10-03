@@ -53,12 +53,17 @@ func resolveFromNodeModules(spec, startDir string) string {
 //     an older main.go.tmpl that joined it to the exe directory before calling Run.
 //  3. spec relative to the launcher's own directory, for the layout where the bundle ships
 //     next to the binary.
-//  4. spec as an npm package specifier, resolved by walking up node_modules.
+//  4. spec as a direct node_modules lookup under nodeDir (dirname of the node executable).
+//     On nvm for Windows, nodeDir is the stable junction (C:\App\nodejs) rather than the
+//     versioned path, so this survives `nvm use <version>` without any stored path.
+//  5. spec as an npm package specifier, resolved by walking up node_modules from the
+//     launcher's own directory.
 //
-// Step 4 exists because a bare launch (a Windows HKCU\Run value, a launchd plist) cannot
-// inject LAUNCHER_BUNDLE_OVERRIDE, and a fixed relative path between two npm packages is not
-// a property anyone can rely on: npm decides whether to hoist or nest.
-func ResolveNodeScript(spec string) (string, error) {
+// nodeDir may be empty (e.g. when node has not been located yet); steps 4 is skipped then.
+// Steps 4 and 5 exist because a bare launch (a Windows HKCU\Run value, a launchd plist)
+// cannot inject LAUNCHER_BUNDLE_OVERRIDE, and a fixed relative path between two npm packages
+// is not a property anyone can rely on: npm decides whether to hoist or nest.
+func ResolveNodeScript(spec, nodeDir string) (string, error) {
 	if override := strings.TrimSpace(os.Getenv("LAUNCHER_BUNDLE_OVERRIDE")); override != "" {
 		if isFile(override) {
 			return override, nil
@@ -81,6 +86,12 @@ func ResolveNodeScript(spec string) (string, error) {
 
 	if nextTo := filepath.Join(exeDir, filepath.FromSlash(spec)); isFile(nextTo) {
 		return nextTo, nil
+	}
+
+	if nodeDir != "" {
+		if fromNode := filepath.Join(nodeDir, "node_modules", filepath.FromSlash(spec)); isFile(fromNode) {
+			return fromNode, nil
+		}
 	}
 
 	if fromPkg := resolveFromNodeModules(spec, exeDir); fromPkg != "" {

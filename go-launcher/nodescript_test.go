@@ -22,7 +22,7 @@ func TestResolveNodeScriptPrefersEnvOverride(t *testing.T) {
 	bundle := writeFile(t, filepath.Join(base, "explicit", "app.cjs"))
 	t.Setenv("LAUNCHER_BUNDLE_OVERRIDE", bundle)
 
-	got, err := ResolveNodeScript("@scope/pkg/dist/app.cjs")
+	got, err := ResolveNodeScript("@scope/pkg/dist/app.cjs", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestResolveNodeScriptPrefersEnvOverride(t *testing.T) {
 
 func TestResolveNodeScriptRejectsBadEnvOverride(t *testing.T) {
 	t.Setenv("LAUNCHER_BUNDLE_OVERRIDE", filepath.Join(t.TempDir(), "missing.cjs"))
-	if _, err := ResolveNodeScript("app.cjs"); err == nil {
+	if _, err := ResolveNodeScript("app.cjs", ""); err == nil {
 		t.Fatal("expected an error rather than a silent fallback when the override is wrong")
 	}
 }
@@ -42,7 +42,7 @@ func TestResolveNodeScriptAcceptsExistingPathAsGiven(t *testing.T) {
 	t.Setenv("LAUNCHER_BUNDLE_OVERRIDE", "")
 	bundle := writeFile(t, filepath.Join(t.TempDir(), "joined", "app.cjs"))
 
-	got, err := ResolveNodeScript(bundle)
+	got, err := ResolveNodeScript(bundle, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -53,12 +53,36 @@ func TestResolveNodeScriptAcceptsExistingPathAsGiven(t *testing.T) {
 
 func TestResolveNodeScriptReportsMissingBundle(t *testing.T) {
 	t.Setenv("LAUNCHER_BUNDLE_OVERRIDE", "")
-	_, err := ResolveNodeScript("@scope/nowhere/dist/app.cjs")
+	_, err := ResolveNodeScript("@scope/nowhere/dist/app.cjs", "")
 	if err == nil {
 		t.Fatal("expected an error when nothing resolves")
 	}
 	if !filepath.IsAbs(os.Args[0]) && err == nil {
 		t.Fatal("unreachable guard")
+	}
+}
+
+func TestResolveNodeScriptFromNodeDir(t *testing.T) {
+	t.Setenv("LAUNCHER_BUNDLE_OVERRIDE", "")
+	root := t.TempDir()
+	// Simulate nvm junction layout: nodeDir/node_modules/@scope/pkg/dist/app.cjs
+	bundle := writeFile(t, filepath.Join(root, "node_modules", "@scope", "pkg", "dist", "app.cjs"))
+
+	got, err := ResolveNodeScript("@scope/pkg/dist/app.cjs", root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != bundle {
+		t.Fatalf("got %q, want %q", got, bundle)
+	}
+}
+
+func TestResolveNodeScriptNodeDirEmptyFallsThrough(t *testing.T) {
+	t.Setenv("LAUNCHER_BUNDLE_OVERRIDE", "")
+	// nodeDir="" must not cause a panic or unexpected hit — falls through to walk-up.
+	_, err := ResolveNodeScript("@scope/nowhere/dist/app.cjs", "")
+	if err == nil {
+		t.Fatal("expected an error when nothing resolves")
 	}
 }
 
