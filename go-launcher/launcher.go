@@ -299,9 +299,11 @@ func runDaemon(cfg Config, args []string) {
 		os.Exit(1)
 	}
 
-	// Resolve the bundle: env override, an existing path as given, next to the launcher, or an
-	// npm package specifier walked up through node_modules. See ResolveNodeScript.
-	resolvedScript, scriptErr := ResolveNodeScript(cfg.NodeScript)
+	// Resolve the bundle: env override, an existing path as given, next to the launcher,
+	// directly under dirname(node), or an npm package specifier walked up through node_modules.
+	// Pass dirname(nodePath) so the resolver can probe the stable npm global prefix directly —
+	// on nvm for Windows this is the junction (C:\App\nodejs) rather than the versioned path.
+	resolvedScript, scriptErr := ResolveNodeScript(cfg.NodeScript, filepath.Dir(nodePath))
 	if scriptErr != nil {
 		logError(cfg.ConfigDir, "launcher", scriptErr.Error())
 		os.Exit(1)
