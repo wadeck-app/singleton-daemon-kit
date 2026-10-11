@@ -179,10 +179,27 @@ export async function startHealthServer<T extends CommandMap>(
       }
 
       const start = Date.now();
+      // Detect the client giving up (process killed, connection reset, --wait timeout) while
+      // the handler is still running — e.g. a `trigger-job` with `wait: true` that keeps the
+      // handler awaiting job completion long after the HTTP connection underneath it is gone.
+      // Without this, that case is invisible on the daemon side: the handler finishes
+      // normally, sendJson() below silently no-ops against a dead socket, and nothing in
+      // `orch logs` records that a response went nowhere.
+      let clientGone = false;
+      res.once('close', () => {
+        if (!res.writableEnded) clientGone = true;
+      });
       try {
         const result = await Promise.resolve(handler(payload));
         const durationMs = Date.now() - start;
         hooks?.onCommand?.(commandName, durationMs);
+        if (clientGone) {
+          hooks?.onCommandError?.(commandName, new Error(
+            `client disconnected after ${durationMs}ms, before the response could be delivered `
+            + `(command completed successfully server-side)`,
+          ));
+          return;
+        }
         if (result === undefined) {
           sendJson(res, 200, { ok: true });
         } else {

@@ -41,7 +41,7 @@ export interface DaemonHandle {
 }
 
 export interface DaemonClient<T extends CommandMap> {
-  send<K extends CommandName<T>>(command: K, payload?: unknown): Promise<CommandResult<T, K>>;
+  send<K extends CommandName<T>>(command: K, payload?: unknown, opts?: { timeoutMs?: number }): Promise<CommandResult<T, K>>;
   isRunning(): Promise<boolean>;
   version(): Promise<{ version: string; pid: number; config_dir: string; sdkVersion: number; [key: string]: unknown }>;
 }

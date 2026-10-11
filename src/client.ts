@@ -31,7 +31,7 @@ interface ClientOptions<T extends CommandMap> {
   commands: T;
 }
 
-function httpPost(port: number, commandPath: string, token: string, payload?: unknown): Promise<{ status: number; body: Record<string, unknown> }> {
+function httpPost(port: number, commandPath: string, token: string, payload?: unknown, timeoutMs = 5000): Promise<{ status: number; body: Record<string, unknown> }> {
   return new Promise((resolve, reject) => {
     const body = payload !== undefined ? JSON.stringify(payload) : '';
     const req = http.request(
@@ -59,9 +59,14 @@ function httpPost(port: number, commandPath: string, token: string, payload?: un
         });
       }
     );
-    req.setTimeout(5000, () => {
-      req.destroy(new Error('HTTP timeout after 5s'));
-    });
+    // 0 disables the idle timeout — used by callers that hold the connection open
+    // for a long-running command (e.g. a `--wait` trigger) with no bytes flowing
+    // until the command finishes, which the fixed 5s default would always trip.
+    if (timeoutMs > 0) {
+      req.setTimeout(timeoutMs, () => {
+        req.destroy(new Error(`HTTP timeout after ${timeoutMs}ms`));
+      });
+    }
     req.on('error', reject);
     if (body) req.write(body);
     req.end();
@@ -95,7 +100,7 @@ export function createDaemonClient<T extends CommandMap>(options: ClientOptions<
       return resp.body as { version: string; pid: number; config_dir: string; sdkVersion: number };
     },
 
-    async send<K extends CommandName<T>>(command: K, payload?: unknown): Promise<CommandResult<T, K>> {
+    async send<K extends CommandName<T>>(command: K, payload?: unknown, opts?: { timeoutMs?: number }): Promise<CommandResult<T, K>> {
       const data = await readPortFile(configDir);
       const localHandler = (options.commands as Record<string, ((...args: unknown[]) => unknown) | undefined>)[command as string];
 
@@ -137,7 +142,7 @@ export function createDaemonClient<T extends CommandMap>(options: ClientOptions<
         throw err;
       }
 
-      const resp = await httpPost(data.port, command, token, payload).catch((err: unknown) => {
+      const resp = await httpPost(data.port, command, token, payload, opts?.timeoutMs).catch((err: unknown) => {
         const msg = getErrorMessage(err);
         if (msg.includes('ECONNREFUSED') || msg.includes('ECONNRESET') || msg.includes('timeout')) {
           throw new DaemonNotRunningError(`Daemon is not running (connection failed: ${msg})`);
