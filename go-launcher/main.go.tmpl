@@ -38,5 +38,7 @@ func main() {
 		UpdateCmd: []string{
 {{range .UpdateCmd}}			"{{.}}",
 {{end}}		},
+		// Opt-in bounded restart after a crash (Go-only, see README "Crash restart"):
+		// CrashRestart: &launcher.CrashRestart{StartCommand: "myapp start"},
 	})
 }

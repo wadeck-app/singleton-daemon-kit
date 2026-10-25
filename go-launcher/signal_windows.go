@@ -12,6 +12,9 @@ import (
 // is the only portable graceful-stop signal. signal_other.go handles SIGTERM
 // for Linux/macOS. Do not add SIGTERM here.
 
+// stopSignals are the signals that ask the launcher to stop.
+var stopSignals = []os.Signal{os.Interrupt}
+
 // forwardSignals starts a goroutine that forwards os.Interrupt to cmd.
 // Returns a stop channel: the caller must close it (exactly once) to
 // signal the goroutine to exit. The goroutine never closes this channel —
@@ -25,6 +28,7 @@ func forwardSignals(cmd *exec.Cmd) chan struct{} {
 		defer signal.Stop(sigCh)
 		select {
 		case <-sigCh:
+			signalReceived.Store(true)
 			if cmd.Process != nil {
 				_ = cmd.Process.Signal(os.Interrupt)
 			}

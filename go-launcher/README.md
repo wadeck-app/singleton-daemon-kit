@@ -112,6 +112,47 @@ bash go-launcher/build.sh launcher.config.json dist/
 
 `build.sh` substitutes `appName` and `displayName` from `launcher.config.json` into `versioninfo.json` before running `goversioninfo`. Install it once: `go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest`. Build silently skips resource embedding when `goversioninfo` is absent.
 
+## Crash restart (opt-in)
+
+Default: a daemon that exits non-zero ends the launcher, and nothing restarts it. Set `Config.CrashRestart` to restart it, bounded.
+
+**Enable it in Go, not in `launcher.config.json`** (the JSON file would make a restart policy editable without review, and `build.sh` fails with an explicit error if it finds a `crashRestart` key). In the consumer's `main.go.tmpl`, add inside the `launcher.Config{...}` literal passed to `launcher.Run`:
+
+```go
+CrashRestart: &launcher.CrashRestart{StartCommand: "orch start"},
+```
+
+Omitted fields take the defaults:
+
+| Field | Default | Meaning |
+|---|---|---|
+| `Delays` | 2s, 10s, 30s | Wait before restart n (last one reused) |
+| `MaxRestarts` | 3 | Crash restarts allowed per `Window` |
+| `Window` | 10 min | Period `MaxRestarts` is counted over |
+| `StartCommand` | app name | Shown in the give-up message |
+
+The next crash is not restarted: the launcher logs `daemon crashed N times in 10 minutes, not restarting: see <logs>, then run <StartCommand>` at ERROR and exits with the daemon's last code. Each crash and restart is a launcher log line with the exit code.
+
+Never a crash: exit 0 (stop, restart sentinel, update sentinel) and an exit after the launcher forwarded a stop signal (Ctrl+C, SIGTERM).
+
+Always a crash, restarted: any other non-zero exit, including a kill from outside that the launcher did not forward. That covers POSIX SIGKILL and the OOM killer (Go reports exit code -1) and Windows `taskkill /F` (exit 1); restarting after an OOM kill is intended.
+
+A Ctrl+C or SIGTERM received during the back-off wait stops the launcher: no restart, one WARN line, exit with the last crash's code.
+
+**Startup failures are restarted too.** A daemon that exits 1 at startup (bad config, port taken, missing dependency) is started 4 times: delays 2s + 10s + 30s, about 42s plus the runs, then the launcher gives up. Read the give-up line and the daemon log; do not wait for it to recover.
+
+Crash marker: on a crash the launcher writes `<configDir>/crashed.json` (`time, kind, error, version, pid, source`; `source` is `"launcher"`). Rules:
+
+| Existing file | Result |
+|---|---|
+| none | launcher writes it |
+| `source: "launcher"`, `time` before the start of the run that crashed | replaced by this crash |
+| `source: "launcher"`, `time` not before that run start | kept |
+| any file without `source: "launcher"` (the daemon's own report, with the cause) | kept, whenever written |
+| not valid JSON | kept, WARN naming the file: delete it |
+
+The daemon should still delete the file at start.
+
 ## Environment variables
 
 | Variable | Description |

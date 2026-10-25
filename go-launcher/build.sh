@@ -77,6 +77,18 @@ if [[ -z "$DEFAULT_CONFIG_DIR" ]]; then
   exit 1
 fi
 
+# --- Reject keys that look like options but are Go-only ---
+# The crash restart is enabled in Go (Config.CrashRestart is json:"-"), never from this file. A key here would be
+# ignored and the consumer would ship a launcher that never restarts, so it is an error, not a no-op.
+HAS_CRASH_RESTART=$(node -e "const c=require('$CONFIG_FILE'); process.stdout.write(Object.keys(c).some(k => k.toLowerCase() === 'crashrestart') ? 'yes' : 'no')")
+if [[ "$HAS_CRASH_RESTART" == "yes" ]]; then
+  echo "Error: 'crashRestart' in $CONFIG_FILE is not supported: the crash restart cannot be enabled from the JSON file." >&2
+  echo "  Enable it in your main.go.tmpl, inside the launcher.Config literal passed to launcher.Run:" >&2
+  echo "    CrashRestart: &launcher.CrashRestart{StartCommand: \"<app> start\"}," >&2
+  echo "  Then remove the key from $CONFIG_FILE. See go-launcher/README.md, \"Crash restart\"." >&2
+  exit 1
+fi
+
 # --- Locate the template file (same directory as this script) ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Use consumer-provided template if given, otherwise SDK's minimal default

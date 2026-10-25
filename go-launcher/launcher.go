@@ -78,6 +78,10 @@ type Config struct {
 	// Any other command is rejected to prevent launcher.config.json injection attacks.
 	// Leave nil or empty to disable update support (config.update sentinel is ignored).
 	UpdateCmd []string `json:"updateCmd,omitempty"`
+
+	// CrashRestart, when set, restarts the daemon after it exits with a failure, bounded (see CrashRestart).
+	// Nil keeps the historical behaviour: a crash ends the launcher.
+	CrashRestart *CrashRestart `json:"-"`
 }
 
 // validateUpdateCmd checks that UpdateCmd is a safe npm install command.
@@ -284,9 +288,16 @@ func checkSentinels(configDir string, cfg Config) sentinelResult {
 	return sentinelResult{action: sentinelNone, reason: "no sentinel found"}
 }
 
-// runDaemon spawns node.exe with the .cjs script and stays alive until it exits.
-// On Windows a Job Object ensures the child is killed when this process dies.
+// runDaemon runs the daemon under superviseDaemon and exits with the code it returns.
 func runDaemon(cfg Config, args []string) {
+	os.Exit(superviseDaemon(cfg, args, realLoopDeps(cfg)))
+}
+
+// runDaemonOnce spawns node.exe with the .cjs script, stays alive until it exits, and reports how it ended.
+// Problems that restarting cannot fix (no node, no bundle, node cannot be started) exit the launcher here.
+// On Windows a Job Object ensures the child is killed when this process dies.
+func runDaemonOnce(cfg Config, args []string) daemonExit {
+	signalReceived.Store(false)
 	if ppid := os.Getppid(); ppid == 1 {
 		logInfo(cfg.ConfigDir, "launcher", "launched by launchd (login agent, ppid=1)")
 	} else {
@@ -376,25 +387,7 @@ func runDaemon(cfg Config, args []string) {
 
 	close(stopSignals)
 
-	// Check sentinels written by Node before it exited.
-	// Node cannot spawn a new launcher binary outside the Job Object — only the Go
-	// launcher (which is not in the Job Object) can safely re-spawn or trigger an update.
-	logInfo(cfg.ConfigDir, "launcher", fmt.Sprintf("post-exit check: exitCode=%d", exitCode))
-	if exitCode == 0 {
-		result := checkSentinels(cfg.ConfigDir, cfg)
-		switch result.action {
-		case sentinelUpdate:
-			spawnUpdateAndExit(cfg.ConfigDir, cfg.UpdateCmd)
-			// spawnUpdateAndExit calls os.Exit — unreachable.
-		case sentinelRestart:
-			runDaemon(cfg, args)
-			return
-		case sentinelNone:
-			// No sentinel — fall through to os.Exit below.
-		}
-	}
-
-	os.Exit(exitCode)
+	return daemonExit{code: exitCode, signalled: signalReceived.Load(), pid: cmd.Process.Pid}
 }
 
 // DefaultConfigDir returns the XDG-standard config directory for the given app name.

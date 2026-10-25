@@ -9,6 +9,9 @@ import (
 	"syscall"
 )
 
+// stopSignals are the signals that ask the launcher to stop.
+var stopSignals = []os.Signal{os.Interrupt, syscall.SIGTERM}
+
 // forwardSignals starts a goroutine that forwards os.Interrupt/SIGTERM to cmd.
 // Returns a stop channel: the caller must close it (exactly once) to
 // signal the goroutine to exit. The goroutine never closes this channel —
@@ -22,6 +25,7 @@ func forwardSignals(cmd *exec.Cmd) chan struct{} {
 		defer signal.Stop(sigCh)
 		select {
 		case sig := <-sigCh:
+			signalReceived.Store(true)
 			if cmd.Process != nil {
 				_ = cmd.Process.Signal(sig)
 			}
