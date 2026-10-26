@@ -362,7 +362,7 @@ func runDaemonOnce(cfg Config, args []string) daemonExit {
 		logWarn(cfg.ConfigDir, "launcher", fmt.Sprintf("Job Object setup failed (non-fatal): %v", err))
 	}
 
-	stopSignals := forwardSignals(cmd)
+	stopSignals := forwardSignals(cmd, func(m string) { logWarn(cfg.ConfigDir, "launcher", m) })
 
 	// cmd.Wait() with WaitDelay=5s:
 	// - os.Stdout/Stderr are *os.File so no I/O goroutines are created.

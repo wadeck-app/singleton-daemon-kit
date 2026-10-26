@@ -17,7 +17,7 @@ var stopSignals = []os.Signal{os.Interrupt, syscall.SIGTERM}
 // signal the goroutine to exit. The goroutine never closes this channel —
 // doing so would cause a panic when the caller also closes it (e.g. after
 // cmd.Wait() returns in runDaemon).
-func forwardSignals(cmd *exec.Cmd) chan struct{} {
+func forwardSignals(cmd *exec.Cmd, warn func(string)) chan struct{} {
 	sigCh := make(chan os.Signal, 1)
 	stop := make(chan struct{})
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
@@ -27,7 +27,7 @@ func forwardSignals(cmd *exec.Cmd) chan struct{} {
 		case sig := <-sigCh:
 			signalReceived.Store(true)
 			if cmd.Process != nil {
-				_ = cmd.Process.Signal(sig)
+				deliverStop(sig, cmd.Process.Signal, warn)
 			}
 		case <-stop:
 		}

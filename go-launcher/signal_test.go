@@ -20,7 +20,7 @@ func TestForwardSignals_NoPanic(t *testing.T) {
 		t.Skip("cannot start cmd.exe:", err)
 	}
 
-	stop := forwardSignals(cmd)
+	stop := forwardSignals(cmd, func(m string) { t.Errorf("unexpected warning: %s", m) })
 	time.Sleep(20 * time.Millisecond)
 	close(stop)
 	_ = cmd.Wait()

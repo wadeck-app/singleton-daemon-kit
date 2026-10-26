@@ -35,11 +35,16 @@ func TestHelperProcess(t *testing.T) {
 		}
 		defer child.Process.Kill()
 		signalReceived.Store(false)
-		forwardSignals(child)
+		// The warning is the last thing forwardSignals does with an interrupt (signalReceived is set before the forward is
+		// attempted), so waiting for it, not for signalReceived, avoids reading the state too early without any sleep.
+		warned := make(chan string, 1)
+		forwardSignals(child, func(m string) { warned <- m })
 		fmt.Println("ready")
-		deadline := time.Now().Add(10 * time.Second)
-		for !signalReceived.Load() && time.Now().Before(deadline) {
-			time.Sleep(10 * time.Millisecond)
+		select {
+		case m := <-warned:
+			fmt.Println("warning=", m)
+		case <-time.After(10 * time.Second):
+			fmt.Println("warning= none within 10s")
 		}
 		fmt.Println("signalReceived=", signalReceived.Load())
 	case "sleep":
@@ -86,6 +91,17 @@ func runHelper(t *testing.T, mode string) string {
 func TestForwardSignals_aRealConsoleInterruptSetsSignalReceived(t *testing.T) {
 	if got := runHelper(t, "forward"); !strings.Contains(got, "signalReceived= true") {
 		t.Errorf("forwardSignals did not record the interrupt, helper said: %q", got)
+	}
+}
+
+// Go cannot deliver an interrupt to another process on Windows: the failure used to be dropped, now it is a warning that
+// says the daemon is still running and how to stop it.
+func TestForwardSignals_aRealConsoleInterruptThatCannotBeForwardedIsWarned(t *testing.T) {
+	got := runHelper(t, "forward")
+	for _, want := range []string{"warning= could not forward the interrupt signal", "not supported by windows", "still running", "quit"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the helper output lacks %q: %q", want, got)
+		}
 	}
 }
 

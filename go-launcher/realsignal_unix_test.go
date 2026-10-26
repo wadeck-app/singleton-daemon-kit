@@ -28,7 +28,7 @@ func TestForwardSignals_aRealSIGTERMSetsSignalReceivedAndReachesTheChild(t *test
 	waited := make(chan error, 1)
 	go func() { waited <- child.Wait() }()
 
-	stop := forwardSignals(child)
+	stop := forwardSignals(child, func(m string) { t.Errorf("unexpected warning: %s", m) })
 	defer close(stop)
 	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
 		t.Fatal(err)
