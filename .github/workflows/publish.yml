@@ -37,8 +37,35 @@ jobs:
 
       - run: npm run check
 
+  go-test:
+    # The tests are platform specific (real Ctrl+Break on Windows, real SIGTERM on Unix), so each OS runs its own.
+    strategy:
+      # Let the other OSes finish: a Windows-only failure should not hide a macOS one.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same version rule as the module: reads the `go` and `toolchain` lines of go.mod, so CI cannot drift from it.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go-launcher/go.mod
+          cache-dependency-path: go-launcher/go.sum
+
+      # buildsh_test.go runs build.sh, which calls `node` to parse its JSON config; bash itself comes with each runner.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # The module lives in go-launcher/, not at the repository root.
+      - run: go test ./...
+        working-directory: go-launcher
+
   publish:
-    needs: build-and-test
+    # Both jobs block the publish: a Go regression must not ship.
+    needs: [build-and-test, go-test]
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
