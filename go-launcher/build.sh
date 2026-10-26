@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build.sh — Cross-compile the go-launcher consumer binary for 3 targets.
+# build.sh — Cross-compile the go-launcher consumer binary for 5 targets.
 # Usage: build.sh <config.json> <outputDir> [<main.go.tmpl>]
 #
 # Arguments:
@@ -203,7 +203,7 @@ if [[ -f "$VERSIONINFO_SRC" ]]; then
 fi
 
 echo "Generated main.go at $BUILD_DIR/main.go"
-echo "Building 3 targets for $APP_NAME..."
+echo "Building 5 targets for $APP_NAME..."
 
 # --- Build targets ---
 build_target() {
@@ -231,8 +231,10 @@ build_target() {
 build_target "windows" "amd64"  "$OUTPUT_DIR/${APP_NAME}_windows_release.exe"
 build_target "darwin"  "arm64"  "$OUTPUT_DIR/${APP_NAME}_darwin_arm64_release"
 build_target "darwin"  "amd64"  "$OUTPUT_DIR/${APP_NAME}_darwin_amd64_release"
+build_target "linux"   "amd64"  "$OUTPUT_DIR/${APP_NAME}_linux_amd64_release"
+build_target "linux"   "arm64"  "$OUTPUT_DIR/${APP_NAME}_linux_arm64_release"
 
 echo "Build complete. Outputs in $OUTPUT_DIR:"
 ls -lh "$OUTPUT_DIR/${APP_NAME}_windows_release.exe" \
         "$OUTPUT_DIR/${APP_NAME}_darwin_arm64_release" \
-        "$OUTPUT_DIR/${APP_NAME}_darwin_amd64_release" 2>/dev/null || true
+        "$OUTPUT_DIR/${APP_NAME}_darwin_amd64_release"         "$OUTPUT_DIR/${APP_NAME}_linux_amd64_release"         "$OUTPUT_DIR/${APP_NAME}_linux_arm64_release" 2>/dev/null || true

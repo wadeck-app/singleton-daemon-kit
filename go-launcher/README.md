@@ -103,7 +103,8 @@ on either, since npm decides whether to hoist the platform package or nest it. S
 
 ```bash
 bash go-launcher/build.sh launcher.config.json dist/
-# Outputs: dist/myapp_windows_release.exe, dist/myapp_darwin_arm64_release, dist/myapp_darwin_amd64_release
+# Outputs: dist/myapp_windows_release.exe, dist/myapp_darwin_arm64_release, dist/myapp_darwin_amd64_release,
+#          dist/myapp_linux_amd64_release, dist/myapp_linux_arm64_release
 ```
 
 `displayName` populates the Windows PE version info (FileDescription / ProductName in Task Manager Properties). Falls back to `appName` when absent.
