@@ -619,7 +619,9 @@ var _ = exec.Command
 func TestOpenLogFile_succeedsWithValidDir(t *testing.T) {
 	dir := t.TempDir()
 	logMu.Lock()
-	if logFile != nil { logFile.Close() }
+	if logFile != nil {
+		logFile.Close()
+	}
 	logFile = nil
 	logDay = ""
 	logMu.Unlock()
@@ -629,7 +631,9 @@ func TestOpenLogFile_succeedsWithValidDir(t *testing.T) {
 	}
 	logMu.Lock()
 	ok := logFile != nil
-	if logFile != nil { logFile.Close() }
+	if logFile != nil {
+		logFile.Close()
+	}
 	logFile = nil
 	logDay = ""
 	logMu.Unlock()
@@ -652,7 +656,9 @@ func TestLogWrite_writesToFileEvenWhenStderrIsDevNull(t *testing.T) {
 
 	dir := t.TempDir()
 	logMu.Lock()
-	if logFile != nil { logFile.Close() }
+	if logFile != nil {
+		logFile.Close()
+	}
 	logFile = nil
 	logDay = ""
 	logMu.Unlock()
@@ -661,7 +667,9 @@ func TestLogWrite_writesToFileEvenWhenStderrIsDevNull(t *testing.T) {
 
 	// Close logFile before TempDir cleanup to avoid "file in use" error on Windows
 	logMu.Lock()
-	if logFile != nil { logFile.Close() }
+	if logFile != nil {
+		logFile.Close()
+	}
 	logFile = nil
 	logDay = ""
 	logMu.Unlock()

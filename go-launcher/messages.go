@@ -65,4 +65,3 @@ func writeLauncherPIDFile(configDir string, pid int) error {
 	pidPath := filepath.Join(configDir, "config.launcher-pid")
 	return os.WriteFile(pidPath, []byte(fmt.Sprintf("%d", pid)), 0o644)
 }
-
