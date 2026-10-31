@@ -184,21 +184,40 @@ cp "$SCRIPT_DIR/go.sum" "$BUILD_DIR/go.sum"
 
 # Embed Windows version info (FileDescription, ProductName, etc.) via goversioninfo.
 # resource.syso is picked up automatically by `go build` for GOOS=windows.
-# Non-fatal: if goversioninfo is absent the build still succeeds without version info.
+# Without it the build still succeeds but the Windows launcher ships without its metadata, so the gap is never silent:
+# a WARNING on stderr (plus a GitHub Actions annotation in CI), or a hard failure when LAUNCHER_REQUIRE_PE_METADATA=1.
+GOVERSIONINFO_INSTALL="go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest"
+
+# pe_metadata_missing <reason>: report that the Windows executable will lack its PE metadata.
+pe_metadata_missing() {
+  local reason="$1"
+  local lost="the Windows launcher will have no FileDescription / ProductName (Task Manager and file properties show a blank description)"
+  if [[ "${LAUNCHER_REQUIRE_PE_METADATA:-}" == "1" ]]; then
+    echo "Error: $reason, and LAUNCHER_REQUIRE_PE_METADATA=1 forbids building without it: $lost." >&2
+    echo "  Install it:  $GOVERSIONINFO_INSTALL" >&2
+    echo "  (make sure the Go bin directory, usually $(go env GOPATH)/bin, is in PATH), or unset LAUNCHER_REQUIRE_PE_METADATA to build without the metadata." >&2
+    exit 1
+  fi
+  echo "WARNING: $reason: $lost." >&2
+  echo "  Install it:  $GOVERSIONINFO_INSTALL" >&2
+  echo "  Set LAUNCHER_REQUIRE_PE_METADATA=1 to make this build fail instead of warning." >&2
+  if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+    echo "::warning title=Windows launcher without PE metadata::$reason; install it with: $GOVERSIONINFO_INSTALL"
+  fi
+}
+
 VERSIONINFO_SRC="$SCRIPT_DIR/versioninfo.json"
 if [[ -f "$VERSIONINFO_SRC" ]]; then
-  sed -e "s/{{APP_NAME}}/${APP_NAME}/g" \
-      -e "s/{{DISPLAY_NAME}}/${DISPLAY_NAME}/g" \
-      "$VERSIONINFO_SRC" > "$BUILD_DIR/versioninfo.json"
+  sed -e "s/{{APP_NAME}}/${APP_NAME}/g"       -e "s/{{DISPLAY_NAME}}/${DISPLAY_NAME}/g"       "$VERSIONINFO_SRC" > "$BUILD_DIR/versioninfo.json"
   if command -v goversioninfo &>/dev/null; then
     echo "Generating Windows resource file (resource.syso)..."
     if (cd "$BUILD_DIR" && goversioninfo -o resource.syso versioninfo.json); then
       echo "  resource.syso generated"
     else
-      echo "  goversioninfo failed (non-fatal, skipping)"
+      pe_metadata_missing "goversioninfo failed (see its output above)"
     fi
   else
-    echo "  goversioninfo not in PATH — skipping Windows resource embedding"
+    pe_metadata_missing "goversioninfo is not in PATH"
   fi
 fi
 
