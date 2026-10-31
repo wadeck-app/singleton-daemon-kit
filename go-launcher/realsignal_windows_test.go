@@ -33,7 +33,11 @@ func TestHelperProcess(t *testing.T) {
 			fmt.Println("helper: cannot start the child:", err)
 			os.Exit(2)
 		}
-		defer child.Process.Kill()
+		// Not a defer: the helper leaves through os.Exit below, which skips deferred calls and left this ping running for 30 s.
+		stopChild := func() {
+			_ = child.Process.Kill()
+			_ = child.Wait()
+		}
 		signalReceived.Store(false)
 		// The warning is the last thing forwardSignals does with an interrupt (signalReceived is set before the forward is
 		// attempted), so waiting for it, not for signalReceived, avoids reading the state too early without any sleep.
@@ -47,6 +51,8 @@ func TestHelperProcess(t *testing.T) {
 			fmt.Println("warning= none within 10s")
 		}
 		fmt.Println("signalReceived=", signalReceived.Load())
+		fmt.Println("child=", child.Process.Pid)
+		stopChild()
 	case "sleep":
 		// "ready" can only be printed from inside the sleep, so it comes after the handler is installed: 300ms is far above
 		// the microseconds sleepOrSignal needs to call signal.Notify.
@@ -102,6 +108,47 @@ func TestForwardSignals_aRealConsoleInterruptThatCannotBeForwardedIsWarned(t *te
 		if !strings.Contains(got, want) {
 			t.Errorf("the helper output lacks %q: %q", want, got)
 		}
+	}
+}
+
+// processAlive reports whether pid still names a running process (a handle can be opened and it has not exited).
+func processAlive(t *testing.T, pid int) bool {
+	t.Helper()
+	const synchronize, processQueryLimitedInformation, stillActive = 0x00100000, 0x1000, 259
+	h, err := syscall.OpenProcess(synchronize|processQueryLimitedInformation, false, uint32(pid))
+	if err != nil {
+		// ERROR_INVALID_PARAMETER: no such process any more.
+		return false
+	}
+	defer syscall.CloseHandle(h)
+	var code uint32
+	if err := syscall.GetExitCodeProcess(h, &code); err != nil {
+		t.Fatalf("GetExitCodeProcess(%d): %v", pid, err)
+	}
+	return code == stillActive
+}
+
+// The helper starts a `ping -n 30` child; it used to exit through os.Exit with the kill deferred, so the child outlived
+// the test by about 30 s. The helper reports the child pid, and the child must be gone once the helper has exited.
+func TestForwardSignals_theHelperDoesNotLeakItsChildProcess(t *testing.T) {
+	got := runHelper(t, "forward")
+	var pid int
+	for _, line := range strings.Split(got, "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "child="); ok {
+			if _, err := fmt.Sscan(v, &pid); err != nil {
+				t.Fatalf("unreadable child pid in %q: %v", line, err)
+			}
+		}
+	}
+	if pid == 0 {
+		t.Fatalf("the helper did not report its child pid, so the leak cannot be checked: %q", got)
+	}
+	if processAlive(t, pid) {
+		// Do not let the failing test leak it too.
+		if p, err := os.FindProcess(pid); err == nil {
+			_ = p.Kill()
+		}
+		t.Errorf("the helper's child process %d is still running after the helper exited", pid)
 	}
 }
 
