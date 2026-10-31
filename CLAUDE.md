@@ -13,7 +13,7 @@ Wraps a Node.js CLI daemon in a named binary (`flow.exe`, `wdrive.exe`, etc.) so
 
 ## Versioning — never bump manually
 
-Version format: `1.YYYYMMDDHHMMSS.BUILD` (e.g. `1.20260820143022.320`), computed by CI.  
+Version format: `YYYY.MM.DD-BUILD-sha` (e.g. `2026.10.26-096-3bbfe66f`), computed by CI (`ci/scripts/compute-version.sh`); `X.Y.Z` for a stable release started by hand.  
 `npm version` is blocked locally via the `preversion` script — only runs in CI (`$CI=true`).  
 Commit code changes only; CI handles version and publish.
 
@@ -66,4 +66,4 @@ echo "//npm.pkg.github.com/:_authToken=${TOKEN}" >> ~/.npmrc
 ## Contributing
 
 Run `npm run check` before committing (`tsc --noEmit && vitest run`).  
-Go changes: run `go test ./go-launcher/...` from the repo root.
+Go changes: run `go test ./...` inside `go-launcher/` (it is its own Go module, so it cannot run from the repo root).
